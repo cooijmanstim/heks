@@ -23,7 +23,6 @@
          (l (- board-interior-size j 1)))
     (cond ((<= (+ l i) 3) :void)
           ((<= (+ k j) 3) :void)
-          ; FIXME: the void cases are wrong
           ((and (<= i 3) (<= j 3)) :white-man)
           ((and (<= k 3) (<= l 3)) :black-man)
           (t :empty))))
