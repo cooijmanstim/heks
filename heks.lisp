@@ -123,21 +123,23 @@
   (destructuring-bind (directions maximum-distance)
       (piece-properties (tile-object (aref board i j)) player)
     (declare (ignore directions)) ; capture goes in all directions
-    (labels ((poop (capture-points)
+    (labels ((recur (i j capture-points)
                (iter (for didj in *all-directions*)
                      (with captures = '())
                      (iter inner-loop
-                           (for d from 1 to maximum-distance)
+                           (for d from 1)
                            (for i2 = (+ i (* d (car didj))))
                            (for j2 = (+ j (* d (cdr didj))))
                            (for tile = (aref board i2 j2))
                            (for object = (tile-object tile))
                            (for owner = (tile-owner tile))
                            (with capture-point = nil)
+                           (with empties-passed = 0)
+                           (while (< empties-passed maximum-distance))
                            (cond ((and (null capture-point)
                                        (eq object :empty))
                                   ;; haven't yet passed over an enemy piece. no capture, but keep going.
-                                  )
+                                  (incf empties-passed))
                                  ((and (null capture-point)
                                        (member object '(:man :king))
                                        (eq owner (opponent player))
@@ -146,15 +148,16 @@
                                   (setf capture-point (cons i2 j2)))
                                  ((and capture-point
                                        (eq object :empty))
+                                  (incf empties-passed)
                                   ;; have passed over an enemy piece. possible stopping point or turning point.
                                   (push (list (cons i j) (cons i2 j2)) captures)
-                                  (iter (for continuation in (poop (cons capture-point capture-points)))
+                                  (iter (for continuation in (recur i2 j2 (cons capture-point capture-points)))
                                         (push (cons (cons i j) continuation) captures)))
                                  (t
                                   ;; this is going nowhere
                                   (return-from inner-loop))))
                      (finally (return captures)))))
-      (poop '()))))
+      (recur i j '()))))
 
 ;;; NOTE: a move is a list (x y z ...) of points visited,
 ;;; and everything between the points is captured
@@ -176,8 +179,8 @@
           (unless captures
             (nconcing (cdr subresult) into moves))
           (finally
-           (if (null captures)
-               moves
-               ;; longest capture is mandatory
-               (cl-utilities:extrema captures #'> :key #'length))))))
+           (return (if (null captures)
+                       moves
+                       ;; longest capture is mandatory
+                       (cl-utilities:extrema captures #'> :key #'length)))))))
 
