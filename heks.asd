@@ -11,10 +11,11 @@
   :author "Tim Cooijmans <t.cooijmans@student.maastrichtuniversity.nl>"
   :maintainer "Tim Cooijmans <t.cooijmans@student.maastrichtuniversity.nl>"
   :licence "GPL"
-  :depends-on (:alexandria)
+  :depends-on (:alexandria :lisp-unit :cl-utilities :iterate)
   :serial t
   :components
   ((:file "package")
-   (:file "heks")))
+   (:file "heks")
+   (:file "test")))
 
 (require :sb-sprof)
