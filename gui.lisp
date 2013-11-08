@@ -23,10 +23,12 @@
                     (list (cos angle) (sin angle))))
           (mapcar #'fraction-to-angle '(-5/12 -1/12))))
 
-(defparameter *background-color* (sdl:color :r #x83 :g #x5d :b #x36))
-(defparameter *board-color*      (sdl:color :r #xc5 :g #x93 :b #x5e))
-(defparameter *white-color*      (sdl:color :r #xb1 :g #xab :b #x93))
-(defparameter *black-color*      (sdl:color :r #x57 :g #x43 :b #xca))
+(defparameter *piece-radius* (* 0.7 *scale*))
+
+(defparameter *background-color* (sdl:color :r #x66 :g #x66 :b #x66))
+(defparameter *board-color*      (sdl:color :r #x99 :g #x99 :b #x99))
+(defparameter *piece-colors*     (list (cons :white (sdl:color :r #xcc :g #xcc :b #xcc))
+                                       (cons :black (sdl:color :r #x33 :g #x33 :b #x33))))
 
 (defun onscreen-position (i j)
   (let ((is (list i j)))
@@ -65,15 +67,21 @@
 
 (defun draw-tile (tile dxs)
   (unless (eq (tile-object tile) :void)
-    (let ((polygon (mapcar #'make-point-boa
+    (let ((hexagon (mapcar #'make-point-boa
                            (iter (for xs in *hexagon*)
                                  (collect (iter (for x in xs)
                                                 (for dx in dxs)
-                                                (collect (+ x dx))))))))
-      (sdl:draw-polygon polygon :color *board-color* :aa t)
+                                                (collect (+ x dx)))))))
+          (p (make-point-boa dxs))
+          (piece-color (cdr (assoc (tile-owner tile) *piece-colors*))))
+      (sdl:draw-polygon hexagon :color *board-color* :aa t)
       (sdl:flood-fill (make-point-boa dxs) :surface *surface* :color *board-color*)
       ;; draw-filled-polygon refuses to work...
-      '(sdl:draw-filled-polygon polygon :color *board-color*))))
+      '(sdl:draw-filled-polygon hexagon :color *board-color*)
+      (case (tile-object tile)
+        (:man  (sdl:draw-filled-circle p (round *piece-radius*) :color piece-color))
+        (:king (sdl:draw-filled-circle p (round *piece-radius*) :color piece-color)
+               (sdl:draw-filled-circle p (round (* 0.8 *piece-radius*)) :color *board-color*))))))
 
 (defun main ()
   (sdl:with-init ()
