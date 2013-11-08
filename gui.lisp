@@ -21,12 +21,13 @@
             (mapcar (lambda (x)
                       (* x 2 *scale*))
                     (list (cos angle) (sin angle))))
+          ;; negative angles because screen y is upside-down
           (mapcar #'fraction-to-angle '(-5/12 -1/12))))
 
 (defparameter *piece-radius* (* 0.7 *scale*))
 
 (defparameter *background-color* (sdl:color :r #x66 :g #x66 :b #x66))
-(defparameter *board-color*      (sdl:color :r #x99 :g #x99 :b #x99))
+(defparameter *board-color*      (sdl:color :r #x88 :g #x88 :b #x88))
 (defparameter *piece-colors*     (list (cons :white (sdl:color :r #xcc :g #xcc :b #xcc))
                                        (cons :black (sdl:color :r #x33 :g #x33 :b #x33))))
 
@@ -57,8 +58,8 @@
         (for number in-vector "123456789")
         (for letter in-vector "abcdefghi")
         (for j in '(0 0 0 0 0 1 2 3 4))
-        (draw-character number (onscreen-position i (+ j 1/4)))
-        (draw-character letter (onscreen-position (+ j 1/4) i))))
+        (draw-character number (onscreen-position (+ j 1/4) i))
+        (draw-character letter (onscreen-position i (+ j 1/4)))))
 
 (defun make-point-boa (xs)
   (sdl:point :x (first xs) :y (second xs)))
