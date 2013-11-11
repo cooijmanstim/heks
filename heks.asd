@@ -16,6 +16,7 @@
   :serial t
   :components
   ((:file "package")
+   (:file "util")
    (:file "heks")
    (:file "test")
    (:file "gui")))
