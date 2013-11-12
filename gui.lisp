@@ -48,9 +48,7 @@
   ;; 1) center coordinates
   ;; 2) transform coordinates
   ;; 3) uncenter coordinates
-  (let ((ij (v-v ij (vmap (lambda (i)
-                            (floor i 2))
-                          *board-dimensions*))))
+  (let ((ij (v-v ij (s*v 1/2 *board-dimensions*))))
     (v+v (v (v.v ij (first  *hexagonal-basis*))
             (v.v ij (second *hexagonal-basis*)))
          (s*v 1/2 *window-dimensions*))))
