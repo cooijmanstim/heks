@@ -117,8 +117,8 @@
       (:man
        (iter (for didj in (player-forward-directions (tile-owner tile)))
              (for ij2 = (v+v ij didj))
-             (when (eq (tile-object (board-tile board ij2)) :empty))
-             (collect (list ij ij2))))
+             (when (eq (tile-object (board-tile board ij2)) :empty)
+               (collect (list ij ij2)))))
       (:king
        (iter (for didj in *all-directions*)
              (nconcing (iter (for d from 1)
