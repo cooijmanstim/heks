@@ -3,6 +3,8 @@
 (declaim (optimize (debug 3)))
 
 (defparameter *window-dimensions* (v 500 500))
+(defparameter *window-center* (s*v 1/2 *window-dimensions*))
+
 (defparameter *surface* nil)
 
 (defparameter *font* (sdl:initialise-font sdl:*font-10x20*))
@@ -45,23 +47,17 @@
 (defparameter *piece-radius* (* 0.7 *scale*))
 
 (defun window-position (ij)
-  ;; 1) center coordinates
-  ;; 2) transform coordinates
-  ;; 3) uncenter coordinates
-  (let ((ij (v-v ij (s*v 1/2 *board-dimensions*))))
-    (v+v (v (v.v ij (first  *hexagonal-basis*))
-            (v.v ij (second *hexagonal-basis*)))
-         (s*v 1/2 *window-dimensions*))))
+  (let ((ij (v-v ij *board-center*)))
+    (v+v (v+v (s*v (s1 ij) (first  *hexagonal-basis*))
+              (s*v (s2 ij) (second *hexagonal-basis*)))
+         *window-center*)))
 
 (defun board-position (xy)
-  ;; 1) center coordinates
-  ;; 2) transform coordinates
-  ;; 3) uncenter coordinates
-  (let ((xy (v-v xy (s*v 1/2 *window-dimensions*))))
+  (let ((xy (v-v xy *window-center*)))
     (vmap #'round
-          (v+v (v (v.v xy (first  *hexagonal-basis-inverse*))
-                  (v.v xy (second *hexagonal-basis-inverse*)))
-               (s*v 1/2 *board-dimensions*)))))
+          (v+v (v+v (s*v (s1 xy) (first  *hexagonal-basis-inverse*))
+                    (s*v (s2 xy) (second *hexagonal-basis-inverse*)))
+               *board-center*))))
 
 (defun draw-board (board)
   (iter (for i from 1 below (- *board-size* 1))
@@ -132,7 +128,8 @@
       (labels ((recompute-moves ()
                  (setq all-moves (moves state)
                        submove '()
-                       supermoves all-moves))
+                       supermoves all-moves)
+                 (print supermoves))
                (redraw ()
                  (sdl:clear-display *background-color*)
                  (draw-state state)
@@ -149,36 +146,36 @@
         (sdl:with-events ()
           (:quit-event () t)
           (:key-up-event
-           (:state state :scancode scancode :key key :mod mod :unicode unicode)
-           (declare (ignore scancode unicode))
-           (case key
-             (:sdl-key-space
-              (when supermoves
-                (push (apply-move state submove) breadcrumbs)
-                (recompute-moves)
-                (redraw)))
-             (:sdl-key-z
-              (when (intersection mod (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
-                (unapply-move state (pop breadcrumbs))
-                (recompute-moves)
-                (redraw)))))
+           (:state s :scancode scancode :key key :mod mod :unicode unicode)
+           (declare (ignore s scancode unicode))
+           (cond ((sdl:key= key :sdl-key-space)
+                  (when supermoves
+                    (push (apply-move state submove) breadcrumbs)
+                    (recompute-moves)
+                    (redraw)))
+                 ((sdl:key= key :sdl-key-z)
+                  (when (intersection mod (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
+                    (unapply-move state (pop breadcrumbs))
+                    (recompute-moves)
+                    (redraw)))))
           (:mouse-button-up-event
            (:button button :state s :x x :y y)
            (declare (ignore s))
-           (case button
-             (:sdl-button-left
-              (let ((ij (board-position (v x y))))
-                ;; tentatively push
-                (far-push ij submove)
-                (recompute-moves)
-                ;; if no supermoves, then the move is invalid
-                (cond ((null supermoves)
-                       (far-pop submove)
-                       (recompute-moves))
-                      (t (redraw)))))
-             (:sdl-button-right
-              (far-pop submove)
-              (setf supermoves (supermoves submove all-moves))
-              (redraw))))
+           ;; can't use (case button ...) because sdl:sdl-button-left is of type 'bit -_-
+           (cond ((= button sdl:sdl-button-left)
+                  (let ((ij (board-position (v x y))))
+                    (print ij)
+                    ;; tentatively push
+                    (far-push ij submove)
+                    (recompute-moves)
+                    ;; if no supermoves, then the move is invalid
+                    (cond ((null supermoves)
+                           (far-pop submove)
+                           (recompute-moves))
+                          (t (redraw)))))
+                 ((= button sdl:sdl-button-right)
+                  (far-pop submove)
+                  (setf supermoves (supermoves submove all-moves))
+                  (redraw))))
           (:video-expose-event () (sdl:update-display)))))))
 

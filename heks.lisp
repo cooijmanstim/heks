@@ -29,6 +29,7 @@
 ; bounds checking.  hence 11 instead of 9 here.
 (defparameter *board-size* 11)
 (defparameter *board-dimensions* (v *board-size* *board-size*))
+(defparameter *board-center* (s+v -1/2 (s*v 1/2 *board-dimensions*)))
 
 (defun board-tile (board ij)
   (aref board (s1 ij) (s2 ij)))
@@ -194,6 +195,7 @@
                        (cl-utilities:extrema captures #'> :key #'length)))))))
 
 (defun apply-move (state move)
+  (assert (not (null move)))
   (let* ((board (state-board state))
          (player (state-player state))
          (initial-tile (board-tile board (car move)))
