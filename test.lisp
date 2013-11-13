@@ -36,10 +36,24 @@
   (assert-equality #'v= (v 0 0) (vmap (constantly 0) (v 1 2)))
   (assert-equality #'tree-equal '(1 2) (v->list (make-v 1 2))))
 
+(define-test far-modify
+  (let ((l (list 1 2 3 4 5))
+        (x 6))
+    (multiple-value-bind (l1 l2)
+        (nbutlast* l 2)
+      (assert-equal '(1 2 3) l1)
+      (assert-equal '(4 5) l2)
+      (assert-equal '(1 2 3) l))
+    (far-push x l)
+    (assert-equal x (lastcar l))
+    (assert-equal x (far-pop l))
+    (assert-equal 3 (lastcar l))))
+
 (define-test board-screen-transform
   (iter (repeat 5)
         (for ij = (v (random 10) (random 10)))
-        (assert-equality #'v= ij (board-position (window-position ij)))))
+        (assert-equality #'v= ij (board-position (window-position ij))))
+  (assert-equality #'v= *window-center* (window-position *board-center*)))
 
 (define-test displacement-direction
   (iter (repeat 2)
