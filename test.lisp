@@ -33,8 +33,9 @@
                     ,@extras))
 
 (define-test v
+  (assert-true (v= (v 1 1) (v 1 1)))
   (assert-equality #'v= (v 0 0) (vmap (constantly 0) (v 1 2)))
-  (assert-equality #'tree-equal '(1 2) (v->list (make-v 1 2))))
+  (assert-equality #'tree-equal '(1 2) (v->list (v 1 2))))
 
 (define-test far-modify
   (let ((l (list 1 2 3 4 5))
@@ -78,6 +79,22 @@
                         (displacement-direction ij (v+v ij (s*v distance direction)))
                       (assert-equal direction direction2)
                       (assert-equal distance distance2))))))
+
+(define-test submove
+  (assert-true (submovep '((1 . 1)) '((1 . 1) (1 . 2))))
+  (assert-false (submovep '((1 . 1)) '((1 . 2) (1 . 3)))))
+
+(define-test supermoves
+  (let ((moves '(((1 . 1) (2 . 2))
+                 ((1 . 1) (2 . 1))
+                 ((1 . 2) (2 . 3)))))
+    (assert-moveset '(((1 1) (2 2))
+                      ((1 1) (2 1)))
+                    (supermoves '((1 . 1)) moves))
+    (assert-moveset '()
+                    (supermoves '((3 . 3)) moves))
+    (assert-moveset '(((1 2) (2 3)))
+                    (supermoves '((1 . 2)) moves))))
 
 (define-test piece-moves
   (let ((board (make-test-board-with '((1 1 :man :white)

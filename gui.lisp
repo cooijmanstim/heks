@@ -107,7 +107,7 @@
         (for b on super)
         (for sub-has-more = (rest a))
         ;; iter immediately returns nil if this form fails
-        (always (v= a b))
+        (always (v= (first a) (first b)))
         ;; if it doesn't, iter stops when it reaches the end of the shortest
         ;; list; see which one it is. for submovep it is required that super
         ;; is the longer list.
