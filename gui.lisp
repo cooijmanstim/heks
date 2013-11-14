@@ -127,8 +127,7 @@
     (sdl:with-init ()
       (labels ((recompute-moves ()
                  (setq all-moves (moves state)
-                       submove '()
-                       supermoves all-moves)
+                       supermoves (supermoves submove all-moves))
                  (print supermoves))
                (redraw ()
                  (sdl:clear-display *background-color*)
@@ -149,13 +148,15 @@
            (:state s :scancode scancode :key key :mod mod :unicode unicode)
            (declare (ignore s scancode unicode))
            (cond ((sdl:key= key :sdl-key-space)
-                  (when supermoves
+                  (when (and submove supermoves)
                     (push (apply-move state submove) breadcrumbs)
+                    (setf submove '())
                     (recompute-moves)
                     (redraw)))
                  ((sdl:key= key :sdl-key-z)
                   (when (intersection mod (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
                     (unapply-move state (pop breadcrumbs))
+                    (setf submove '())
                     (recompute-moves)
                     (redraw)))))
           (:mouse-button-up-event
@@ -164,7 +165,6 @@
            ;; can't use (case button ...) because sdl:sdl-button-left is of type 'bit -_-
            (cond ((= button sdl:sdl-button-left)
                   (let ((ij (board-position (v x y))))
-                    (print ij)
                     ;; tentatively push
                     (far-push ij submove)
                     (recompute-moves)
@@ -175,7 +175,7 @@
                           (t (redraw)))))
                  ((= button sdl:sdl-button-right)
                   (far-pop submove)
-                  (setf supermoves (supermoves submove all-moves))
+                  (recompute-moves)
                   (redraw))))
           (:video-expose-event () (sdl:update-display)))))))
 

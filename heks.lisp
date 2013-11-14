@@ -194,6 +194,9 @@
                        ;; longest capture is mandatory
                        (cl-utilities:extrema captures #'> :key #'length)))))))
 
+(defun toggle-player (state)
+  (setf (state-player state) (opponent (state-player state))))
+
 (defun apply-move (state move)
   (assert (not (null move)))
   (let* ((board (state-board state))
@@ -211,7 +214,7 @@
     (setq capture-points
           (iter (for next-ij in (rest move))
                 (for prev-ij previous next-ij initially (first move))
-                (collect
+                (nconc
                     (multiple-value-bind (didj n) (displacement-direction prev-ij next-ij)
                       (assert (member didj *all-directions* :test #'v=))
                       ;; the only condition on the last tile is that it is empty
@@ -229,9 +232,13 @@
                                (when (or capture-point (eq (tile-owner tile) player))
                                  (assert nil))
                                 (setq capture-point ij)))
-                            (finally (return capture-point)))))))
+                            (finally (return
+                                       (if capture-point
+                                           (list capture-point)
+                                           capture-point))))))))
     ;; now modify state
     (displace-piece board (car move) (lastcar move))
+    (toggle-player state)
     (let ((capture-tiles (mapcar (lambda (ij)
                                    (empty-tile board ij))
                                  capture-points)))
@@ -246,9 +253,5 @@
     (iter (for ij in (breadcrumb-capture-points breadcrumb))
           (for tile in (breadcrumb-capture-tiles breadcrumb))
           (setf (board-tile board ij) tile))
-    (displace-piece board (lastcar move) (car move))))
-
-
-
-
-
+    (displace-piece board (lastcar move) (car move))
+    (toggle-player state)))
