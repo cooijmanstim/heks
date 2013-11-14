@@ -228,7 +228,7 @@
                               (:empty
                                (unless can-fly
                                  (assert nil)))
-                              ('(:man :king)
+                              ((:man :king)
                                (when (or capture-point (eq (tile-owner tile) player))
                                  (assert nil))
                                 (setq capture-point ij)))
