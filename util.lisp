@@ -2,10 +2,13 @@
 
 ;; like nbutlast, but returning the second part of the list as an extra value
 (defun nbutlast* (l &optional n)
-  (assert (>= (length l) n))
-  (iter (for x on l)
-        (for x-ahead on (nthcdr (+ n 1) l))
+  (iter (for x on (cons 'dummy l))
+        (for x-ahead on (nthcdr n l))
+        ;; count length in the same pass
+        (for length from n)
         (finally
+         (when (<= length n)
+           (return (values '() l)))
          ;; x-ahead reaches the end, x reaches the cons where we need to make the cut
          (let ((last (cdr x)))
            (rplacd x nil)
