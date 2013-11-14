@@ -19,6 +19,8 @@
                                        (cons :black (sdl:color :r #x33 :g #x33 :b #x33))))
 (defparameter *status-color*     (sdl:color :r #xaa :g #xaa :b #xaa))
 
+(defparameter *move-color* (sdl:color :r #x33 :g #x55 :b #x77))
+
 (defun fraction->angle (fraction)
   (* 2 pi fraction))
 
@@ -45,6 +47,7 @@
           (collect (s*v (/ 1 det) v)))))
 
 (defparameter *piece-radius* (* 0.7 *scale*))
+(defparameter *move-radius* (round (* 0.4 *scale*)))
 
 (defun window-position (ij)
   (let ((ij (v-v ij *board-center*)))
@@ -79,9 +82,8 @@
 
 (defun draw-tile (tile dx)
   (unless (eq (tile-object tile) :void)
-    (let ((hexagon (mapcar #'v->sdlpoint
-                           (iter (for x in *hexagon*)
-                                 (collect (v+v x dx)))))
+    (let ((hexagon (iter (for x in *hexagon*)
+                         (collect (v->sdlpoint (v+v x dx)))))
           (center (v->sdlpoint dx))
           (piece-color (cdr (assoc (tile-owner tile) *piece-colors*))))
       (sdl:draw-polygon hexagon :color *board-color* :aa t)
@@ -121,6 +123,13 @@
         (when (submovep sub candidate)
           (collect candidate))))
 
+(defun draw-move (move)
+  (iter (for b in (mapcar (compose #'v->sdlpoint #'window-position) move))
+        (for a previous b)
+        (sdl:draw-filled-circle b *move-radius* :surface *surface* :color *move-color*)
+        (unless (null a)
+          (sdl:draw-line a b :surface *surface* :color *move-color* :aa t))))
+
 (defun main ()
   (let ((state (make-initial-state))
         all-moves submove supermoves breadcrumbs)
@@ -132,6 +141,7 @@
                (redraw ()
                  (sdl:clear-display *background-color*)
                  (draw-state state)
+                 (draw-move submove)
                  (sdl:update-display)))
         (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
         (recompute-moves)
