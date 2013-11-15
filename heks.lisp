@@ -110,7 +110,7 @@
 (defun moveset-equal (a b)
   (set-equal a b :test #'move-equal))
 (defun move-equal (a b)
-  (every #'v= a b))
+  (not (mismatch a b :test #'v=)))
 
 (defun piece-moves (board ij)
   (let ((tile (board-tile board ij)))

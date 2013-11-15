@@ -37,6 +37,10 @@
   (assert-equality #'v= (v 0 0) (vmap (constantly 0) (v 1 2)))
   (assert-equality #'tree-equal '(1 2) (v->list (v 1 2))))
 
+(define-test move-equal
+  (assert-false (move-equal (list (v 1 1) (v 1 3))
+                            (list (v 1 1) (v 1 3) (v 3 3)))))
+
 (define-test far-modify
   (let ((l (list 1 2 3 4 5))
         (x 6))
