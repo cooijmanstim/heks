@@ -214,7 +214,7 @@
     (setq capture-points
           (iter (for next-ij in (rest move))
                 (for prev-ij previous next-ij initially (first move))
-                (nconc
+                (nconcing
                     (multiple-value-bind (didj n) (displacement-direction prev-ij next-ij)
                       (assert (member didj *all-directions* :test #'v=))
                       ;; the only condition on the last tile is that it is empty
@@ -226,16 +226,14 @@
                             (with capture-point = nil)
                             (ccase (tile-object tile)
                               (:empty
-                               (unless can-fly
-                                 (assert nil)))
+                               (assert can-fly))
                               ((:man :king)
-                               (when (or capture-point (eq (tile-owner tile) player))
-                                 (assert nil))
-                                (setq capture-point ij)))
+                               (assert (not (or capture-point (eq (tile-owner tile) player))))
+                               (setq capture-point ij)))
                             (finally (return
                                        (if capture-point
                                            (list capture-point)
-                                           capture-point))))))))
+                                           '()))))))))
     ;; now modify state
     (displace-piece board (car move) (lastcar move))
     (toggle-player state)

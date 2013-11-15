@@ -146,3 +146,39 @@
     (assert-moveset '(((2 3) (4 5)))
                     (moves (make-state :board board :player :black)))))
 
+(define-test empty-tile
+  (let* ((board (make-test-board-with '((1 1 :man :white)))))
+    (empty-tile board (v 1 1))
+    (assert-equal :empty (tile-object (board-tile board (v 1 1))))))
+
+(define-test displacement-direction
+  (multiple-value-bind (didj n)
+      (displacement-direction (v 1 1) (v 1 2))
+    (assert-equal (v 0 1) didj)
+    (assert-equal 1 n))
+  (multiple-value-bind (didj n)
+      (displacement-direction (v 1 1) (v 2 2))
+    (assert-equal (v 1 1) didj)
+    (assert-equal 1 n)))
+
+(define-test apply-move
+  (let* ((test-board-designator '((1 1 :man :white)
+                                  (1 2 :man :black)
+                                  (2 1 :man :black)
+                                  (2 3 :man :black)
+                                  (3 4 :man :white)))
+         (state (make-state :board (make-test-board-with test-board-designator)
+                            :player :white))
+         (breadcrumbs '()))
+    (push (apply-move state (designated-move '((1 1) (1 3) (3 3)))) breadcrumbs)
+    (assert-equal :empty (tile-object (board-tile (state-board state) (v 1 2))))
+    (assert-equal :empty (tile-object (board-tile (state-board state) (v 2 3))))
+    (unapply-move state (pop breadcrumbs))
+    (assert-equal :man (tile-object (board-tile (state-board state) (v 1 2))))
+    (assert-equal :man (tile-object (board-tile (state-board state) (v 2 3))))
+    (toggle-player state)
+    (push (apply-move state (designated-move '((2 3) (4 5)))) breadcrumbs)
+    (assert-equal :empty (tile-object (board-tile (state-board state) (v 3 4))))
+    (unapply-move state (pop breadcrumbs))
+    (assert-equal :man (tile-object (board-tile (state-board state) (v 3 4))))))
+

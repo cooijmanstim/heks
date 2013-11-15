@@ -188,4 +188,3 @@
                   (recompute-moves)
                   (redraw))))
           (:video-expose-event () (sdl:update-display)))))))
-
