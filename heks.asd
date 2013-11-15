@@ -18,7 +18,8 @@
   ((:file "package")
    (:file "util")
    (:file "heks")
-   (:file "test")
-   (:file "gui")))
+   (:file "ai")
+   (:file "gui")
+   (:file "test")))
 
 (require :sb-sprof)
