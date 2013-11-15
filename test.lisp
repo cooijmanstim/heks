@@ -62,7 +62,10 @@
       (far-push x l)
       (assert-equal x (lastcar l))
       (assert-equal x (far-pop l))
-      (assert-equal 5 (lastcar l)))))
+      (assert-equal 5 (lastcar l))))
+  (let ((l (list 1 2)))
+    (far-pop l)
+    (assert-equal '(1) l)))
 
 (define-test board-screen-transform
   (iter (repeat 5)

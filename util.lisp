@@ -2,17 +2,16 @@
 
 ;; like nbutlast, but returning the second part of the list as an extra value
 (defun nbutlast* (l &optional n)
-  (iter (for x on (cons 'dummy l))
-        (for x-ahead on (nthcdr n l))
-        ;; count length in the same pass
-        (for length from n)
-        (finally
-         (when (<= length n)
-           (return (values '() l)))
-         ;; x-ahead reaches the end, x reaches the cons where we need to make the cut
-         (let ((last (cdr x)))
-           (rplacd x nil)
-           (return (values l last))))))
+  (do ((x       (cons 'dummy l) (cdr x))
+       (x-ahead (nthcdr n l)    (cdr x-ahead))
+       (niters  0               (1+ niters)))
+      ((null x-ahead)
+       (when (zerop niters)
+         (return (values '() l)))
+       ;; x-ahead reaches the end, x reaches the cons where we need to make the cut
+       (let ((last (cdr x)))
+         (rplacd x nil)
+         (return (values l last))))))
 
 ;; push/pop at end of list
 (defmacro far-push (obj place &environment env)
