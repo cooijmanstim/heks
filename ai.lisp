@@ -27,7 +27,11 @@
                               ((eq owner (opponent (state-player state))) -1)
                               (t 0)))))))
 
+(defparameter *out-of-time* nil)
+
 (defun minimax (state depth alpha beta)
+  (when *out-of-time*
+    (throw :out-of-time nil))
   (if (= depth 0)
       (evaluate-state state)
       (let ((moves (moves state)))
@@ -44,10 +48,24 @@
                     (finish))
                   (finally (return (values value best-move))))))))
 
-(defun minimax-decision (state)
-  (iter (for depth from 0 to 5)
-        (with value) (with best-move)
-        (multiple-value-setq (value best-move) (minimax state depth most-negative-fixnum most-positive-fixnum))
-        (print (list value best-move))
-        (finally (return best-move))))
+(defun minimax-decision (state duration update-callback commit-callback)
+  (setq *out-of-time* nil)
+  (sb-thread:make-thread
+   (lambda ()
+     (sleep duration)
+     (setq *out-of-time* t)
+     (sb-thread:thread-yield)
+     (funcall commit-callback))
+   :name "timer thread")
+  (sb-thread:make-thread
+   (lambda ()
+     (catch :out-of-time
+       (iter (for depth from 0)
+             (with value) (with best-move)
+             (multiple-value-setq (value best-move)
+               (minimax state depth most-negative-fixnum most-positive-fixnum))
+             (print (list depth value best-move))
+             (unless *out-of-time* ;; this *could* happen...
+               (funcall update-callback best-move)))))
+   :name "worker-thread"))
 

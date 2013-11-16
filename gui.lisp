@@ -99,10 +99,14 @@
   (sdl:draw-string-solid status *status-position*
                          :color *status-color* :font *font*))
 
-(defun draw-state (state)
+(defun draw-state (state minimax-deciding)
   (draw-board (state-board state))
   (draw-board-axes)
-  (draw-status (format nil "~A to move" (state-player state))))
+  (draw-status (format nil "~A to move~A"
+                       (state-player state)
+                       (if minimax-deciding
+                           "; thinking..."
+                           ""))))
 
 (defun submovep (sub super)
   (iter (for a on sub)
@@ -130,32 +134,55 @@
         (unless (null a)
           (sdl:draw-line a b :surface *surface* :color *move-color* :aa t))))
 
+(defparameter *decision-time* 10)
+
 (defun main ()
   (let ((state (make-initial-state))
-        all-moves submove supermoves breadcrumbs)
+        all-moves submove supermoves breadcrumbs
+        minimax-deciding)
     (sdl:with-init ()
-      (labels ((commit-move (move)
-                 (push (apply-move state move) breadcrumbs)
+      (labels ((redraw ()
+                 (sdl:clear-display *background-color*)
+                 (draw-state state minimax-deciding)
+                 (draw-move submove)
+                 (sdl:update-display))
+               (fresh-move ()
                  (setf submove '())
-                 (recompute-moves)
-                 (redraw))
-               (undo-move ()
-                 (unapply-move state (pop breadcrumbs))
-                 (setf submove '())
-                 (recompute-moves)
-                 (redraw))
-               (recompute-moves ()
                  (setq all-moves (moves state)
                        supermoves (supermoves submove all-moves))
-                 (print supermoves))
-               (redraw ()
-                 (sdl:clear-display *background-color*)
-                 (draw-state state)
-                 (draw-move submove)
-                 (sdl:update-display)))
+                 (redraw))
+               (update-move (new-submove)
+                 (print (list :update-move new-submove))
+                 (let ((new-supermoves (supermoves new-submove all-moves)))
+                   (cond ((null new-supermoves)
+                          ;; TODO: handle this
+                          (fresh-line)
+                          (format t "invalid move: ~A" new-submove))
+                         (t
+                          (setf submove new-submove
+                                supermoves new-supermoves)
+                          (redraw)))))
+               (commit-move ()
+                 (print (list :commit-move))
+                 (when (and submove
+                            (set-equal (list submove) supermoves :test #'move-equal))
+                   (push (apply-move state submove) breadcrumbs)
+                   (fresh-move)))
+               (undo-move ()
+                 (unapply-move state (pop breadcrumbs))
+                 (fresh-move))
+               (minimax-move ()
+                 (setq minimax-deciding t)
+                 (minimax-decision (copy-state state) *decision-time*
+                                   ;; FIXME: the below are called from another thread. communicate
+                                   ;; through the threadsafe sdl:push-user-event instead!
+                                   (lambda (move)
+                                     (update-move move))
+                                   (lambda ()
+                                     (setq minimax-deciding nil)
+                                     (commit-move)))))
         (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
-        (recompute-moves)
-        (redraw)
+        (fresh-move)
         ;; interface: left-click to build a move (first click chooses the piece
         ;; to move, further clicks choose where to move it. more than one further
         ;; click corresponds to a move capturing multiple pieces, and each click
@@ -168,31 +195,23 @@
            (:state s :scancode scancode :key key :mod mod :unicode unicode)
            (declare (ignore s scancode unicode mod))
            (cond ((sdl:key= key :sdl-key-space)
-                  (when (and submove
-                             (= (length supermoves) 1)
-                             (move-equal submove (first supermoves)))
-                    (commit-move submove)))
+                  (unless minimax-deciding
+                    (commit-move)))
                  ((sdl:key= key :sdl-key-z)
-                  (when (intersection (sdl:get-mods-state) (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
-                    (undo-move)))
+                  (unless minimax-deciding
+                    (when (intersection (sdl:get-mods-state) (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
+                      (undo-move))))
                  ((sdl:key= key :sdl-key-c)
-                  (commit-move (minimax-decision state)))))
+                  (unless minimax-deciding
+                    (minimax-move)))))
           (:mouse-button-up-event
            (:button button :state s :x x :y y)
            (declare (ignore s))
-           ;; can't use (case button ...) because sdl:sdl-button-left is of type 'bit -_-
            (cond ((= button sdl:sdl-button-left)
-                  (let ((ij (board-position (v x y))))
-                    ;; tentatively push
-                    (far-push ij submove)
-                    (recompute-moves)
-                    ;; if no supermoves, then the move is invalid
-                    (when (null supermoves)
-                      (far-pop submove)
-                      (recompute-moves))
-                    (redraw)))
+                  (unless minimax-deciding
+                    (update-move (append submove (list (board-position (v x y)))))))
                  ((= button sdl:sdl-button-right)
-                  (far-pop submove)
-                  (recompute-moves)
-                  (redraw))))
+                  (unless minimax-deciding
+                    (update-move (butlast submove 1))))))
           (:video-expose-event () (sdl:update-display)))))))
+

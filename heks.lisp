@@ -6,7 +6,7 @@
   '(member :white :black))
 
 ; XXX: it is assumed that owner is non-nil iff object is :man or :king
-(defstruct (tile (:constructor make-tile (object &optional owner)))
+(defstruct (tile (:constructor make-tile (object &optional owner)) (:copier nil))
   (object :void :type (member :void     ; the tile is not part of the board (necessary
                                         ; because we're cramming a hexagonal board into
                                         ; a rectangular array
@@ -14,7 +14,7 @@
                               :man :king))
   (owner nil :type (or nil player)))
 
-(defstruct state
+(defstruct (state (:copier nil))
   (board (make-initial-board) :type (array tile))
   (player :white :type player))
 
@@ -68,6 +68,22 @@
 
 (defun make-initial-state ()
   (make-state))
+
+(defun copy-tile (tile)
+  (make-tile (tile-object tile) (tile-owner tile)))
+
+(defun copy-board (board)
+  (let ((board2 (make-array (array-dimensions board)
+                            :element-type 'tile
+                            :adjustable nil)))
+    (iter (for i from 0 below *board-size*)
+          (iter (for j from 0 below *board-size*)
+                (setf (aref board2 i j) (copy-tile (aref board i j)))))
+    board2))
+
+(defun copy-state (state)
+  (make-state :board (copy-board (state-board state))
+              :player (state-player state)))
 
 (defun displacement-direction (ij ij2)
   (let* ((didj (v-v ij2 ij))
