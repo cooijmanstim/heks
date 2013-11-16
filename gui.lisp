@@ -166,14 +166,14 @@
           (:quit-event () t)
           (:key-up-event
            (:state s :scancode scancode :key key :mod mod :unicode unicode)
-           (declare (ignore s scancode unicode))
+           (declare (ignore s scancode unicode mod))
            (cond ((sdl:key= key :sdl-key-space)
                   (when (and submove
                              (= (length supermoves) 1)
                              (move-equal submove (first supermoves)))
                     (commit-move submove)))
                  ((sdl:key= key :sdl-key-z)
-                  (when (intersection mod (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
+                  (when (intersection (sdl:get-mods-state) (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
                     (undo-move)))
                  ((sdl:key= key :sdl-key-c)
                   (commit-move (minimax-decision state)))))
