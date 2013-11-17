@@ -2,88 +2,59 @@
 
 (declaim (optimize (debug 3)))
 
-(deftype player ()
-  '(member :white :black))
 
-; XXX: it is assumed that owner is non-nil iff object is :man or :king
-(defstruct (tile (:constructor make-tile (object &optional owner)) (:copier nil))
-  (object :void :type (member :void     ; the tile is not part of the board (necessary
-                                        ; because we're cramming a hexagonal board into
-                                        ; a rectangular array
-                              :empty    ; there is nothing on the tile
-                              :man :king))
-  (owner nil :type (or nil player)))
+;;; STATE MANIPULATION
 
-(defstruct (state (:copier nil))
-  (board (make-initial-board) :type (array tile))
-  (player :white :type player))
+;; place the object on ij, assume b empty
+(defun place-piece* (board ij tile)
+  (assert (eq (tile-object (board-tile board ij)) :empty))
+  (setf (board-tile board ij) tile))
 
-;; used for move undo
-(defstruct breadcrumb
-  (move nil :type list)
-  (capture-points '() :type list)
-  (capture-tiles '() :type list))
+;; displace the object on a to b, assume b empty
+(defun displace-piece* (board a b)
+  (assert (eq (tile-object (board-tile board b)) :empty))
+  (psetf (board-tile board b) (board-tile board a)
+         (board-tile board a) (board-tile board b)))
 
-; since our choice of representation already forces us to deal with :void tiles,
-; we might as well use a border of :void tiles to avoid the need for explicit
-; bounds checking.  hence 11 instead of 9 here.
-(defparameter *board-size* 11)
-(defparameter *board-dimensions* (v *board-size* *board-size*))
-(defparameter *board-center* (s+v -1/2 (s*v 1/2 *board-dimensions*)))
+;; empty the tile and return whatever was there
+(defun remove-piece* (board ij)
+  (prog1
+      (board-tile board ij)
+    (setf (board-tile board ij) (make-tile :empty))))
 
-(defun board-tile (board ij)
-  (aref board (s1 ij) (s2 ij)))
-(defun set-board-tile (board ij value)
-  (setf (aref board (s1 ij) (s2 ij)) value))
-(defsetf board-tile set-board-tile)
+;; toggle whoever is to move
+(defun toggle-player* (state)
+  (setf (state-player state) (opponent (state-player state))))
 
-(defun initial-tile (ij)
-  (let* ((board-interior-dimensions (s+v -2 *board-dimensions*))
-         (ij (s+v -1 ij))
-         ;; cumulative inverse coordinates
-         (kl (s+v -1 (v-v board-interior-dimensions ij))))
-    (cond ((or (<= (+ (s2 kl) (s1 ij)) 3)
-               (<= (+ (s1 kl) (s2 ij)) 3)) (make-tile :void))
-          ((absv<=s ij 3) (make-tile :man :white))
-          ((absv<=s kl 3) (make-tile :man :black))
-          (t (make-tile :empty)))))
 
-(defun make-initial-board ()
-  (let ((board (make-array (v->list *board-dimensions*)
-                           :element-type 'tile
-                           :initial-element (make-tile :void)
-                           :adjustable nil)))
-    (iter (for i from 1 below (- *board-size* 1))
-          (iter (for j from 1 below (- *board-size* 1))
-                (setf (aref board i j) (initial-tile (v i j)))))
-    board))
+;; like place-piece* with hash update
+(defun place-piece (state ij tile)
+  (place-piece* (state-board state) ij tile)
+  (logxorf (state-hash state)
+             (tile-zobrist-bitstring tile ij)))
 
-(defun make-empty-board ()
-  (let ((board (make-initial-board)))
-    (iter (for i from 1 below (- *board-size* 1))
-          (iter (for j from 1 below (- *board-size* 1))
-                (unless (eq (tile-object (aref board i j)) :void)
-                  (setf (aref board i j) (make-tile :empty)))))
-    board))
+;; like displace-piece* with hash update
+(defun displace-piece (state a b)
+  (let ((board (state-board state)))
+    (logxorf (state-hash state)
+               (tile-zobrist-bitstring (board-tile board a) a)
+               (tile-zobrist-bitstring (board-tile board a) b))
+    (displace-piece* board a b)))
 
-(defun make-initial-state ()
-  (make-state))
+;; remove-piece* with hash update
+(defun remove-piece (state ij)
+  (let ((tile (remove-piece* (state-board state) ij)))
+    (logxorf (state-hash state)
+             (tile-zobrist-bitstring tile ij))
+    tile))
 
-(defun copy-tile (tile)
-  (make-tile (tile-object tile) (tile-owner tile)))
+;; toggle-player* with hash update
+(defun toggle-player (state)
+  (toggle-player* state)
+  (logxorf (state-hash state) (zobrist-player-bitstring)))
 
-(defun copy-board (board)
-  (let ((board2 (make-array (array-dimensions board)
-                            :element-type 'tile
-                            :adjustable nil)))
-    (iter (for i from 0 below *board-size*)
-          (iter (for j from 0 below *board-size*)
-                (setf (aref board2 i j) (copy-tile (aref board i j)))))
-    board2))
 
-(defun copy-state (state)
-  (make-state :board (copy-board (state-board state))
-              :player (state-player state)))
+;;; MOVE GENERATION
 
 (defun displacement-direction (ij ij2)
   (let* ((didj (v-v ij2 ij))
@@ -91,37 +62,11 @@
                  (abs (s2 didj)))))
     (values (s*v (/ 1 n) didj) n)))
 
-(defun displace-piece (board a b)
-  (assert (eq (tile-object (board-tile board b)) :empty))
-  (psetf (board-tile board b) (board-tile board a)
-         (board-tile board a) (board-tile board b)))
-
-;; empty the tile and return whatever was there
-(defun empty-tile (board ij)
-  (prog1
-      (board-tile board ij)
-    (setf (board-tile board ij) (make-tile :empty))))
-
 (defparameter *all-directions*
   (mapcar #'list->v
           '((-1  0) (0 -1)
             ( 0  1) (1  0)
             (-1 -1) (1  1))))
-
-;; using {0,1} or {-1,1} for players instead of :white :black would make this unnecessary
-(defun player-forward-directions (player)
-  (ccase player
-    (:white (mapcar #'list->v '((0  1) ( 1 0) ( 1  1))))
-    (:black (mapcar #'list->v '((0 -1) (-1 0) (-1 -1))))))
-(defun opponent (player)
-  (ccase player
-    (:white :black)
-    (:black :white)))
-
-(defun can-fly (object)
-  (ccase object
-    (:man nil)
-    (:king t)))
 
 (defun moveset-equal (a b)
   (set-equal a b :test #'move-equal))
@@ -210,8 +155,14 @@
                        ;; longest capture is mandatory
                        (cl-utilities:extrema captures #'> :key #'length)))))))
 
-(defun toggle-player (state)
-  (setf (state-player state) (opponent (state-player state))))
+
+;;; MOVE APPLICATION
+
+;; returned by apply-move, accepted by unapply-move. contains undo information.
+(defstruct breadcrumb
+  (move nil :type list)
+  (capture-points '() :type list)
+  (capture-tiles '() :type list))
 
 (defun apply-move (state move)
   (assert (not (null move)))
@@ -251,10 +202,10 @@
                                            (list capture-point)
                                            '()))))))))
     ;; now modify state
-    (displace-piece board (car move) (lastcar move))
+    (displace-piece state (car move) (lastcar move))
     (toggle-player state)
     (let ((capture-tiles (mapcar (lambda (ij)
-                                   (empty-tile board ij))
+                                   (remove-piece state ij))
                                  capture-points)))
       ;; return undo info
       (make-breadcrumb :move move
@@ -262,10 +213,11 @@
                        :capture-tiles capture-tiles))))
 
 (defun unapply-move (state breadcrumb)
-  (let ((board (state-board state))
-        (move (breadcrumb-move breadcrumb)))
+  (let ((move (breadcrumb-move breadcrumb)))
     (iter (for ij in (breadcrumb-capture-points breadcrumb))
           (for tile in (breadcrumb-capture-tiles breadcrumb))
-          (setf (board-tile board ij) tile))
-    (displace-piece board (lastcar move) (car move))
+          (place-piece state ij tile))
+    (displace-piece state (lastcar move) (car move))
     (toggle-player state)))
+
+

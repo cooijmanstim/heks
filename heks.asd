@@ -17,7 +17,9 @@
   :components
   ((:file "package")
    (:file "util")
-   (:file "heks")
+   (:file "representation")
+   (:file "hash")
+   (:file "game")
    (:file "ai")
    (:file "gui")
    (:file "test")))

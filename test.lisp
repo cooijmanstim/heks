@@ -149,14 +149,14 @@
                                        (2 3 :man :black)
                                        (3 4 :man :white)))))
     (assert-moveset '(((1 1) (1 3) (3 3)))
-                    (moves (make-state :board board :player :white)))
+                    (moves (make-state board :white)))
     (assert-moveset '(((2 3) (4 5)))
-                    (moves (make-state :board board :player :black)))))
+                    (moves (make-state board :black)))))
 
-(define-test empty-tile
-  (let* ((board (make-test-board-with '((1 1 :man :white)))))
-    (empty-tile board (v 1 1))
-    (assert-equal :empty (tile-object (board-tile board (v 1 1))))))
+(define-test remove-piece
+  (let* ((state (make-state (make-test-board-with '((1 1 :man :white))))))
+    (remove-piece state (v 1 1))
+    (assert-equal :empty (tile-object (board-tile (state-board state) (v 1 1))))))
 
 (define-test displacement-direction
   (multiple-value-bind (didj n)
@@ -174,8 +174,7 @@
                                   (2 1 :man :black)
                                   (2 3 :man :black)
                                   (3 4 :man :white)))
-         (state (make-state :board (make-test-board-with test-board-designator)
-                            :player :white))
+         (state (make-state (make-test-board-with test-board-designator) :white))
          (breadcrumbs '()))
     (push (apply-move state (designated-move '((1 1) (1 3) (3 3)))) breadcrumbs)
     (assert-equal :empty (tile-object (board-tile (state-board state) (v 1 2))))
@@ -189,3 +188,15 @@
     (unapply-move state (pop breadcrumbs))
     (assert-equal :man (tile-object (board-tile (state-board state) (v 3 4))))))
 
+;; check hash consistency after applying and unapplying 20 moves
+(define-test hash
+  (let ((state (make-initial-state))
+        (breadcrumbs '()))
+    (iter (repeat 20)
+          (for moves = (moves state))
+          (push (apply-move state (random-elt moves)) breadcrumbs)
+          (assert-equal (zobrist-hash state) (state-hash state)))
+    (assert-false (= (state-hash state) 0))  ; duh
+    (iter (for breadcrumb in breadcrumbs)
+          (unapply-move state breadcrumb)
+          (assert-equal (zobrist-hash state) (state-hash state)))))
