@@ -190,13 +190,14 @@
 
 ;; check hash consistency after applying and unapplying 20 moves
 (define-test hash
-  (let ((state (make-initial-state))
-        (breadcrumbs '()))
-    (iter (repeat 20)
-          (for moves = (moves state))
-          (push (apply-move state (random-elt moves)) breadcrumbs)
-          (assert-equal (zobrist-hash state) (state-hash state)))
-    (assert-false (= (state-hash state) 0))  ; duh
-    (iter (for breadcrumb in breadcrumbs)
-          (unapply-move state breadcrumb)
-          (assert-equal (zobrist-hash state) (state-hash state)))))
+  (iter (repeat 10)
+        (let ((state (make-initial-state))
+              (breadcrumbs '()))
+          (iter (repeat 20)
+                (for moves = (moves state))
+                (push (apply-move state (random-elt moves)) breadcrumbs)
+                (assert-equal (zobrist-hash state) (state-hash state)))
+          (assert-false (= (state-hash state) 0))  ; duh
+          (iter (for breadcrumb in breadcrumbs)
+                (unapply-move state breadcrumb)
+                (assert-equal (zobrist-hash state) (state-hash state))))))

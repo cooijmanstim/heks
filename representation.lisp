@@ -23,6 +23,14 @@
     (:man nil)
     (:king t)))
 
+(defun crown-p (tile ij)
+  (with-slots (object owner) tile
+    (and (eq object :man)
+         (ccase owner
+           (:black (or (= (s1 ij) 1) (= (s2 ij) 1)))
+           (:white (or (= (s1 ij) (- *board-size* 2))
+                       (= (s2 ij) (- *board-size* 2))))))))
+
 
 ; XXX: it is assumed that owner is non-nil iff object is :man or :king
 (defstruct (tile (:constructor make-tile (object &optional owner)) (:copier nil))

@@ -22,6 +22,18 @@
       (board-tile board ij)
     (setf (board-tile board ij) (make-tile :empty))))
 
+;; turn a man into a king when he is Ready
+(defun maybe-crown* (tile ij)
+  (when (crown-p tile ij)
+    (setf (tile-object tile) :king)
+    t))
+
+;; turn a king back into a man (used for unapply-move)
+(defun uncrown* (tile)
+  (with-slots (object) tile
+    (assert (eq object :king))
+    (setf object :man)))
+
 ;; toggle whoever is to move
 (defun toggle-player* (state)
   (setf (state-player state) (opponent (state-player state))))
@@ -31,14 +43,14 @@
 (defun place-piece (state ij tile)
   (place-piece* (state-board state) ij tile)
   (logxorf (state-hash state)
-             (tile-zobrist-bitstring tile ij)))
+           (tile-zobrist-bitstring tile ij)))
 
 ;; like displace-piece* with hash update
 (defun displace-piece (state a b)
   (let ((board (state-board state)))
     (logxorf (state-hash state)
-               (tile-zobrist-bitstring (board-tile board a) a)
-               (tile-zobrist-bitstring (board-tile board a) b))
+             (tile-zobrist-bitstring (board-tile board a) a)
+             (tile-zobrist-bitstring (board-tile board a) b))
     (displace-piece* board a b)))
 
 ;; remove-piece* with hash update
@@ -47,6 +59,24 @@
     (logxorf (state-hash state)
              (tile-zobrist-bitstring tile ij))
     tile))
+
+;; maybe-crown* with hash update
+(defun maybe-crown (state move)
+  (with-slots (board hash) state
+    (let* ((ij (lastcar move))
+           (tile (board-tile board ij)))
+      (logxorf hash (tile-zobrist-bitstring tile ij))
+      (prog1 (maybe-crown* tile ij)
+        (logxorf hash (tile-zobrist-bitstring tile ij))))))
+
+;; uncrown* with hash update
+(defun uncrown (state move)
+  (with-slots (board hash) state
+    (let* ((ij (lastcar move))
+           (tile (board-tile board ij)))
+      (logxorf hash (tile-zobrist-bitstring tile ij))
+      (uncrown* (board-tile (state-board state) ij))
+      (logxorf hash (tile-zobrist-bitstring tile ij)))))
 
 ;; toggle-player* with hash update
 (defun toggle-player (state)
@@ -162,7 +192,8 @@
 (defstruct breadcrumb
   (move nil :type list)
   (capture-points '() :type list)
-  (capture-tiles '() :type list))
+  (capture-tiles '() :type list)
+  (crowned nil :type boolean))
 
 (defun apply-move (state move)
   (assert (not (null move)))
@@ -206,18 +237,21 @@
     (toggle-player state)
     (let ((capture-tiles (mapcar (lambda (ij)
                                    (remove-piece state ij))
-                                 capture-points)))
+                                 capture-points))
+          (crowned (maybe-crown state move)))
       ;; return undo info
       (make-breadcrumb :move move
                        :capture-points capture-points
-                       :capture-tiles capture-tiles))))
+                       :capture-tiles capture-tiles
+                       :crowned crowned))))
 
 (defun unapply-move (state breadcrumb)
-  (let ((move (breadcrumb-move breadcrumb)))
-    (iter (for ij in (breadcrumb-capture-points breadcrumb))
-          (for tile in (breadcrumb-capture-tiles breadcrumb))
+  (with-slots (move capture-points capture-tiles crowned) breadcrumb
+    (iter (for ij in capture-points)
+          (for tile in capture-tiles)
           (place-piece state ij tile))
+    (when crowned
+      (uncrown state move))
     (displace-piece state (lastcar move) (car move))
     (toggle-player state)))
-
 

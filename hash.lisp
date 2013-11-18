@@ -22,14 +22,18 @@
 
 ;; desperately-TODO: stop using keywords for white/black and man/king
 (defun tile-zobrist-bitstring (tile ij)
-  (aref (first *zobrist-bitstrings*)
-        (s1 ij) (s2 ij)
-        (ccase (tile-owner tile)
-          (:white 0)
-          (:black 1))
-        (ccase (tile-object tile)
-          (:man 0)
-          (:king 1))))
+  (with-slots (object owner) tile
+    (if (not (member object '(:man :king)))
+        0
+        (aref (first *zobrist-bitstrings*)
+              (s1 ij) (s2 ij)
+              (ccase owner
+                (:white 0)
+                (:black 1))
+              (ccase object
+                (:man 0)
+                (:king 1))))))
+
 (defun zobrist-player-bitstring ()
   (second *zobrist-bitstrings*))
 
@@ -49,7 +53,7 @@
                            (:man 0)
                            (:king 1)
                            (otherwise nil)))
-                (unless (or (null k) (null l))
+                (when (and k l)
                   (logxorf hash (aref zobrist-bitstrings i j k l)))))
     hash))
 

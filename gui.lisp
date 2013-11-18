@@ -47,7 +47,7 @@
           (collect (s*v (/ 1 det) v)))))
 
 (defparameter *piece-radius* (* 0.7 *scale*))
-(defparameter *move-radius* (round (* 0.4 *scale*)))
+(defparameter *move-radius* (round (* 0.2 *scale*)))
 
 (defun window-position (ij)
   (let ((ij (v-v ij *board-center*)))
