@@ -92,7 +92,8 @@
     ;; XXX: is there a more efficient way to check for end state?
     (when (null moves)
       (return-from minimax (values (evaluate-end-state state) nil)))
-    ;; TODO: shuffle moves (and put them in a vector for speed)
+    ;; TODO: put moves in a vector for faster reordering
+    (shuffle moves)
     (order-moves state moves)
     (multiple-value-bind (value best-move)
         (iter (for move in moves)
