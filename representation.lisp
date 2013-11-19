@@ -41,17 +41,6 @@
                               :man :king))
   (owner nil :type (or nil player)))
 
-(defun initial-tile (ij)
-  (let* ((board-interior-dimensions (s+v -2 *board-dimensions*))
-         (ij (s+v -1 ij))
-         ;; cumulative inverse coordinates
-         (kl (s+v -1 (v-v board-interior-dimensions ij))))
-    (cond ((or (<= (+ (s2 kl) (s1 ij)) 3)
-               (<= (+ (s1 kl) (s2 ij)) 3)) (make-tile :void))
-          ((absv<=s ij 3) (make-tile :man :white))
-          ((absv<=s kl 3) (make-tile :man :black))
-          (t (make-tile :empty)))))
-
 (defun copy-tile (tile)
   (make-tile (tile-object tile) (tile-owner tile)))
 
@@ -72,6 +61,17 @@
 (defun set-board-tile (board ij value)
   (setf (aref board (s1 ij) (s2 ij)) value))
 (defsetf board-tile set-board-tile)
+
+(defun initial-tile (ij)
+  (let* ((board-interior-dimensions (s+v -2 *board-dimensions*))
+         (ij (s+v -1 ij))
+         ;; cumulative inverse coordinates
+         (kl (s+v -1 (v-v board-interior-dimensions ij))))
+    (cond ((or (<= (+ (s2 kl) (s1 ij)) 3)
+               (<= (+ (s1 kl) (s2 ij)) 3)) (make-tile :void))
+          ((absv<=s ij 3) (make-tile :man :white))
+          ((absv<=s kl 3) (make-tile :man :black))
+          (t (make-tile :empty)))))
 
 (defun make-initial-board ()
   (let ((board (make-array (v->list *board-dimensions*)
@@ -134,3 +134,4 @@
   (and (eq (state-player a) (state-player b))
        (= (state-hash a) (state-hash b))
        (board-equal (state-board a) (state-board b))))
+

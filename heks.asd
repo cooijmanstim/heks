@@ -22,6 +22,7 @@
    (:file "game")
    (:file "ai")
    (:file "gui")
-   (:file "test")))
+   (:file "test")
+   (:file "heks")))
 
 (require :sb-sprof)
