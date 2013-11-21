@@ -37,6 +37,9 @@
              ,setter
              (first ,last-symbol)))))))
 
+(defun no-op (&rest args)
+  (declare (ignore args)))
+
 ;; inverse of array-row-major-index
 ;; taken from comp.lang.lisp
 (defun array-index-row-major (array rmi)

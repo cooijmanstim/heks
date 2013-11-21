@@ -212,3 +212,22 @@
           (iter (for breadcrumb in breadcrumbs)
                 (unapply-move state breadcrumb)
                 (assert-equal (zobrist-hash state) (state-hash state))))))
+
+(define-test spsa
+  (labels ((f (x)
+             ;; a convex quadratic function with minimum at 0
+             (let ((H #2A((5 4 3)
+                          (4 4 2)
+                          (3 2 5))))
+               (iter (for i from 0 to 2)
+                     (summing (iter (for j from 0 to 2)
+                                    (summing (* (aref x j) (aref H i j) (aref x i)))))))))
+    (assert-float-equal 0.0 (f #(0.0 0.0 0.0)))
+    (multiple-value-bind (x* xs)
+        (spsa 1000 #'f (vector (random 10) (random 10) (random 10)) :c 0.1)
+      (let ((fs (mapcar #'f xs)))
+        (assert-true (every (lambda (x)
+                              (< (abs x) 1e-3))
+                            x*)
+                     x* xs fs)))))
+

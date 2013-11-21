@@ -40,16 +40,17 @@
                  (fresh-move))
                (minimax-move ()
                  (setq minimax-deciding t)
-                 (sb-thread:make-thread (lambda ()
-                                          (minimax-decision (copy-state state)
-                                                            ;; FIXME: the below are called from another thread. communicate
-                                                            ;; through the threadsafe sdl:push-user-event instead!
-                                                            (lambda (move)
-                                                              (update-move move))
-                                                            (lambda ()
-                                                              (setq minimax-deciding nil)
-                                                              (commit-move))))
-                                        :name "worker thread")))
+                 (sb-thread:make-thread
+                  (lambda ()
+                    (minimax-decision state
+                                      :duration 10
+                                      ;; FIXME: communicate through the threadsafe sdl:push-user-event instead!
+                                      :updater (lambda (move)
+                                                 (update-move move))
+                                      :committer (lambda ()
+                                                   (setq minimax-deciding nil)
+                                                   (commit-move))))
+                  :name "worker thread")))
         (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
         (fresh-move)
         ;; interface: left-click to build a move (first click chooses the piece
@@ -101,13 +102,14 @@
 
 ;; use spsa to maximize win probability against opponent
 (defun learn-feature-weights (opponent initial-weights)
-  (let ((*minimax-decision-time* 1)
+  (let ((decision-time 1)
         (nsteps 10)
         (nsamples 30))
     (spsa nsteps
           (lambda (weights)
             (- (log (measure-performance
-                     (make-minimax-player (make-learned-evaluator weights))
+                     (lambda (state)
+                       (minimax-decision state :duration decision-time :evaluator (make-learned-evaluator weights)))
                      opponent nsamples)
                     2)))
           initial-weights)))

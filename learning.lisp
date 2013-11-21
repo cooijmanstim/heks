@@ -1,5 +1,7 @@
 (in-package :heks)
 
+(declaim (optimize (debug 3)))
+
 ;; each state is written on a separate line, as a space-separated vector of bits.
 ;; the vector encompasses four bitboards: one for each combination of white/black
 ;; and man/king.
@@ -42,44 +44,37 @@
     (iter (with state = (make-initial-state))
           (with breadcrumbs = '()) ;; debug info
           (for player in players)
+          (for moves = (moves state))
           (until (null moves))
-          (let ((moves (moves state))
-                (move (funcall player state)))
+          (let ((move (funcall player state)))
             (assert (member move moves :test #'move-equal))
             (push (apply-move state move) breadcrumbs))
           (finally (return (eq player player2))))))
 
-(defun no-op (&rest args)
-  (declare (ignore args)))
-
-(defun make-minimax-player (evaluation-fn)
-  (lambda (state)
-    (let ((*minimax-evaluator* evaluation-fn))
-      (minimax-decision state #'no-op #'no-op))))
-
 (defun make-learned-evaluator (weights)
-  (lambda (state)
+  (lambda (state moves)
+    (declare (ignore moves))
     (reduce #'+ (map '(vector single-float) #'*
                      weights (state->vector state)))))
 
 ;; minimization through simultaneous perturbation stochastic approximation
+;; returns final theta and a list of previous thetas, most recent first
 ;; TODO: integrate this with the granularity thing, in which case we should
 ;; ensure thetas always sum to 1. some may be negative, but as long as
 ;; they sum to 1 the linear combination of features will be in [0,1]
-(defun spsa (n fn theta)
+;; choose c approximately equal to the standard deviation of the measurements fn
+(defun spsa (n fn theta &key (c 0.5))
   (labels ((apply-delta (xs dxs scale)
              (map '(vector single-float)
                   (lambda (x dx)
                     (+ x (* scale dx)))
                   xs dxs)))
-    ;; these are taken from "Multivariate stochastic approximation using a simultaneous
-    ;; perturbation gradient approximation" by Spall. there is no literature on how to
-    ;; pick these, it seems.
-    (let ((a 300) (c 100) (bigA 2) (alpha 1) (gamma 0.25))
+    (let ((a 0.5) (bigA (/ n 10)) (alpha 0.602) (gamma 0.101)
+          (thetas (list theta)))
       (iter (for k from 1 to n)
             (for ak = (/ a (expt (+ k bigA) alpha)))
             (for ck = (/ c (expt k gamma)))
-            (for delta = (iter (for x in theta)
+            (for delta = (iter (for x in-vector theta)
                                (collect (- (* (random 2) 2) 1))))
             (for theta- = (apply-delta theta delta (- ck)))
             (for theta+ = (apply-delta theta delta ck))
@@ -89,7 +84,9 @@
                            (lambda (d)
                              (/ (- y+ y-) 2 ck d))
                            delta))
-            (iter (for i index-of-vector theta)
-                  (decf (aref theta i) (* ak (aref g^ i)))))))
-  theta)
-
+            (setf theta (map '(vector single-float)
+                             (lambda (theta g^)
+                               (- theta (* ak g^)))
+                             theta g^))
+            (push theta thetas))
+      (values theta thetas))))

@@ -20,10 +20,9 @@
 ;; evaluations are from the point of view of whoever's turn it is
 
 (defun evaluate-state (state moves)
-  (granularize
-   (if (null moves)
-       0 ;; no moves, player loses
-       (material-advantage state))))
+  (if (null moves)
+      0 ;; no moves, player loses
+      (material-advantage state)))
 
 ;; ratio of pieces that is owned by the current player
 (defun material-advantage (state)
@@ -35,8 +34,6 @@
                 (incf ours))
               (incf all))))
     (/ ours all)))
-
-(defparameter *minimax-evaluator* #'evaluate-state)
 
 
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
@@ -73,7 +70,7 @@
       (cons move (delete move moves :test #'move-equal)))
     moves))
 
-(defun minimax (state depth alpha beta &aux (original-alpha alpha))
+(defun minimax (state depth evaluator alpha beta &aux (original-alpha alpha))
   (when *out-of-time*
     (throw :out-of-time nil))
   (when-let ((transposition (lookup-transposition state)))
@@ -90,7 +87,7 @@
   ;; investigate the subtree
   (let ((moves (moves state)))
     (when (or (= depth 0) (null moves))
-      (return-from minimax (values (funcall *minimax-evaluator* state moves) nil)))
+      (return-from minimax (values (granularize (funcall evaluator state moves)) nil)))
     ;; TODO: put moves in a vector for faster reordering?
     (shuffle moves)
     (order-moves state moves)
@@ -98,7 +95,7 @@
         (iter (for move in moves)
               (for breadcrumb = (apply-move state move))
               (finding move maximizing (evaluation-inverse
-                                        (minimax state (1- depth)
+                                        (minimax state (1- depth) evaluator
                                                  (evaluation-inverse beta)
                                                  (evaluation-inverse alpha)))
                        into (best-move value))
@@ -121,23 +118,27 @@
           (setf d depth move best-move)))
       (values value best-move))))
 
-(defun minimax-decision (state update-callback commit-callback)
+(defun minimax-decision (state &key (duration 10)
+                         (updater #'no-op)
+                         (committer #'no-op)
+                         (evaluator #'evaluate-state))
   (setq *out-of-time* nil)
   (sb-thread:make-thread
    (lambda ()
-     (sleep *minimax-decision-time*)
+     (sleep duration)
      (setq *out-of-time* t)
      (sb-thread:thread-yield))
    :name "timer thread")
   (let (value best-move)
     (catch :out-of-time
       ;; use a fresh table with every top-level search
-      (let ((*transposition-table* (make-hash-table :test 'state-equal)))
+      (let ((*transposition-table* (make-hash-table :test 'state-equal))
+            (state (copy-state state)))
         (iter (for depth from 0)
               (multiple-value-setq (value best-move)
-                (minimax state depth *evaluation-minimum* *evaluation-maximum*))
+                (minimax state depth evaluator *evaluation-minimum* *evaluation-maximum*))
               (print (list depth (ungranularize value) best-move))
               (unless *out-of-time* ;; this *could* happen...
-                (funcall update-callback best-move)))))
-    (funcall commit-callback)
+                (funcall updater best-move)))))
+    (funcall committer)
     best-move))
