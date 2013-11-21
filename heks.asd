@@ -21,6 +21,7 @@
    (:file "hash")
    (:file "game")
    (:file "ai")
+   (:file "learning")
    (:file "gui")
    (:file "test")
    (:file "heks")))

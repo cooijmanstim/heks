@@ -103,6 +103,17 @@
     (assert-moveset '(((1 2) (2 3)))
                     (supermoves '((1 . 2)) moves))))
 
+(define-test iter-board
+  (let* ((board (make-empty-board))
+         (ijs (iter (for tile at ij of board)
+                    (collect ij)))
+         (ijs-black (iter (for tile at ij of board from :black)
+                          (collect ij))))
+    (assert-equal 61 (length ijs))
+    (assert-equal (v 1 1) (first ijs))
+    (assert-equal (s+v -2 *board-dimensions*) (lastcar ijs))
+    (assert-equal ijs (reverse ijs-black))))
+
 (define-test piece-moves
   (let ((board (make-test-board-with '((1 1 :man :white)
                                        (1 2 :man :black)

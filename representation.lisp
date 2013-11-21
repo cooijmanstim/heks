@@ -3,7 +3,6 @@
 (declaim (optimize (debug 3)))
 
 
-;; TODO: use a more practical representation such as {-1, 1}
 (deftype player ()
   '(member :white :black))
 
@@ -61,6 +60,32 @@
 (defun set-board-tile (board ij value)
   (setf (aref board (s1 ij) (s2 ij)) value))
 (defsetf board-tile set-board-tile)
+
+;; iter clause for iterating over board interior
+;; by default, iterates in the order a1, b1, ..., i1, b2, ... etc.  :void tiles are
+;; skipped.
+;; use FROM :black to reverse the order of iteration
+(defmacro-driver (FOR tilevar AT ijvar OF boardexpr &optional FROM playerexpr)
+  (let ((keyword (if generate 'generate 'for)))
+    (with-gensyms (playervar boardvar rmivar maxrmivar)
+      `(progn
+         (with ,playervar = ,playerexpr)
+         (with ,boardvar = ,boardexpr)
+         (with ,maxrmivar = (array-total-size ,boardvar))
+         (with ,rmivar = 0)
+         (,keyword ,ijvar
+                   next (progn
+                          (incf ,rmivar)
+                          (when (>= ,rmivar ,maxrmivar)
+                            (terminate))
+                          (list->v
+                           (array-index-row-major ,boardvar
+                                                  (if (eq ,playervar :black)
+                                                      (- ,maxrmivar ,rmivar 1)
+                                                      ,rmivar)))))
+         (,keyword ,tilevar next (board-tile ,boardvar ,ijvar))
+         (when (eq (tile-object ,tilevar) :void)
+           (next-iteration))))))
 
 (defun initial-tile (ij)
   (let* ((board-interior-dimensions (s+v -2 *board-dimensions*))

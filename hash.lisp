@@ -7,6 +7,7 @@
   (random *zobrist-ceiling*))
 
 (defparameter *zobrist-bitstrings*
+  ;; TODO: board-size - 1? something stinks here
   (let ((positions (make-array (list (- *board-size* 1) (- *board-size* 1) 2 2)
                                :element-type 'fixnum
                                :adjustable nil))

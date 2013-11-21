@@ -2,8 +2,6 @@
 
 (declaim (optimize (debug 3)))
 
-(defparameter *minimax-decision-time* 10)
-
 ;; TODO: handle end-of-game
 (defun main ()
   (let ((state (make-initial-state))
@@ -42,7 +40,8 @@
                  (fresh-move))
                (minimax-move ()
                  (setq minimax-deciding t)
-                 (minimax-decision (copy-state state) *minimax-decision-time*
+                 ;; TODO: thread here
+                 (minimax-decision (copy-state state)
                                    ;; FIXME: the below are called from another thread. communicate
                                    ;; through the threadsafe sdl:push-user-event instead!
                                    (lambda (move)
@@ -84,3 +83,30 @@
                     (update-move (butlast submove 1))))))
           (:video-expose-event () (sdl:update-display)))))))
 
+
+;; performs moves randomly, writing resulting states to stream every now and then.
+(defun generate-states (stream n)
+  (let ((storage-rate 0.05))
+    (iter (with state = (make-initial-state))
+          (for moves = (moves state))
+          (while (> n 0))
+          (when (null moves)
+            (setf state (make-initial-state))
+            (next-iteration))
+          (apply-move state (random-elt moves))
+          (when (< (random 1.0) storage-rate)
+            (format-vector stream (state->vector state))
+            (decf n)))))
+
+;; use spsa to maximize win probability against opponent
+(defun learn-feature-weights (opponent initial-weights)
+  (let ((*minimax-decision-time* 1)
+        (nsteps 10)
+        (nsamples 30))
+    (spsa nsteps
+          (lambda (weights)
+            (- (log (measure-performance
+                     (make-minimax-player (make-learned-evaluator initial-weights))
+                     opponent nsamples)
+                    2)))
+          initial-weights)))

@@ -19,24 +19,25 @@
 
 ;; evaluations are from the point of view of whoever's turn it is
 
-;; an end-state is a state where no more moves can be made. the player to move loses.
-(defun evaluate-end-state (state)
-  (declare (ignore state))
-  (granularize 0))
-
-;; for now, just ratio of pieces that is player's
-(defun evaluate-state (state)
+(defun evaluate-state (state moves)
   (granularize
-   (let ((ours 0) (all 0))
-     (iter (for i from 1 below (- *board-size* 1))
-           (iter (for j from 1 below (- *board-size* 1))
-                 (with-slots (object owner)
-                     (board-tile (state-board state) (v i j))
-                   (when (member object '(:man :king))
-                     (when (eq owner (state-player state))
-                       (incf ours))
-                     (incf all)))))
-     (/ ours all))))
+   (if (null moves)
+       0 ;; no moves, player loses
+       (material-advantage state))))
+
+;; ratio of pieces that is owned by the current player
+(defun material-advantage (state)
+  (let ((ours 0) (all 0))
+    (iter (for tile at ij of (state-board state))
+          (with-slots (object owner) tile
+            (when (member object '(:man :king))
+              (when (eq owner (state-player state))
+                (incf ours))
+              (incf all))))
+    (/ ours all)))
+
+(defparameter *minimax-evaluator* #'evaluate-state)
+
 
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
 ;; but then collisions can happen, and stored information may be invalid.  if
@@ -64,6 +65,7 @@
           (make-transposition))))
 
 (defparameter *out-of-time* nil)
+(defparameter *minimax-decision-time* 10)
 
 (defun order-moves (state moves)
   (if-let ((transposition (lookup-transposition state)))
@@ -86,13 +88,10 @@
         (maxf alpha lower-bound)
         (minf beta upper-bound))))
   ;; investigate the subtree
-  (when (= depth 0)
-    (return-from minimax (values (evaluate-state state) nil)))
   (let ((moves (moves state)))
-    ;; XXX: is there a more efficient way to check for end state?
-    (when (null moves)
-      (return-from minimax (values (evaluate-end-state state) nil)))
-    ;; TODO: put moves in a vector for faster reordering
+    (when (or (= depth 0) (null moves))
+      (return-from minimax (values (funcall *minimax-evaluator* state) nil)))
+    ;; TODO: put moves in a vector for faster reordering?
     (shuffle moves)
     (order-moves state moves)
     (multiple-value-bind (value best-move)
@@ -122,25 +121,23 @@
           (setf d depth move best-move)))
       (values value best-move))))
 
-(defun minimax-decision (state duration update-callback commit-callback)
+(defun minimax-decision (state update-callback commit-callback)
   (setq *out-of-time* nil)
   (sb-thread:make-thread
    (lambda ()
-     (sleep duration)
+     (sleep *minimax-decision-time*)
      (setq *out-of-time* t)
-     (sb-thread:thread-yield)
-     (funcall commit-callback))
+     (sb-thread:thread-yield))
    :name "timer thread")
-  (sb-thread:make-thread
-   (lambda ()
-     (catch :out-of-time
-       ;; use a fresh table with every top-level search
-       (let ((*transposition-table* (make-hash-table :test 'state-equal)))
-         (iter (for depth from 0)
-               (with value) (with best-move)
-               (multiple-value-setq (value best-move)
-                 (minimax state depth *evaluation-minimum* *evaluation-maximum*))
-               (print (list depth (ungranularize value) best-move))
-               (unless *out-of-time* ;; this *could* happen...
-                 (funcall update-callback best-move))))))
-   :name "worker-thread"))
+  (let (value best-move)
+    (catch :out-of-time
+      ;; use a fresh table with every top-level search
+      (let ((*transposition-table* (make-hash-table :test 'state-equal)))
+        (iter (for depth from 0)
+              (multiple-value-setq (value best-move)
+                (minimax state depth *evaluation-minimum* *evaluation-maximum*))
+              (print (list depth (ungranularize value) best-move))
+              (unless *out-of-time* ;; this *could* happen...
+                (funcall update-callback best-move)))))
+    (funcall commit-callback best-move)
+    best-move))
