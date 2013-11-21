@@ -90,7 +90,7 @@
   ;; investigate the subtree
   (let ((moves (moves state)))
     (when (or (= depth 0) (null moves))
-      (return-from minimax (values (funcall *minimax-evaluator* state) nil)))
+      (return-from minimax (values (funcall *minimax-evaluator* state moves) nil)))
     ;; TODO: put moves in a vector for faster reordering?
     (shuffle moves)
     (order-moves state moves)
@@ -139,5 +139,5 @@
               (print (list depth (ungranularize value) best-move))
               (unless *out-of-time* ;; this *could* happen...
                 (funcall update-callback best-move)))))
-    (funcall commit-callback best-move)
+    (funcall commit-callback)
     best-move))

@@ -31,7 +31,7 @@
 
 (defun measure-performance (player opponent n)
   (/ (iter (repeat n)
-           (counting (match-players player opponent *minimax-decision-time*)))
+           (counting (match-players player opponent)))
      n))
 
 ;; return t if player1 won, nil otherwise
@@ -47,7 +47,7 @@
                 (move (funcall player state)))
             (assert (member move moves :test #'move-equal))
             (push (apply-move state move) breadcrumbs))
-          (finally (leave (eq player player2))))))
+          (finally (return (eq player player2))))))
 
 (defun no-op (&rest args)
   (declare (ignore args)))
@@ -80,7 +80,6 @@
             (for ak = (/ a (expt (+ k bigA) alpha)))
             (for ck = (/ c (expt k gamma)))
             (for delta = (iter (for x in theta)
-                               (declare (ignore x))
                                (collect (- (* (random 2) 2) 1))))
             (for theta- = (apply-delta theta delta (- ck)))
             (for theta+ = (apply-delta theta delta ck))
@@ -90,6 +89,7 @@
                            (lambda (d)
                              (/ (- y+ y-) 2 ck d))
                            delta))
-            (decf theta (* ak g^)))))
+            (iter (for i index-of-vector theta)
+                  (decf (aref theta i) (* ak (aref g^ i)))))))
   theta)
 

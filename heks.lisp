@@ -40,15 +40,16 @@
                  (fresh-move))
                (minimax-move ()
                  (setq minimax-deciding t)
-                 ;; TODO: thread here
-                 (minimax-decision (copy-state state)
-                                   ;; FIXME: the below are called from another thread. communicate
-                                   ;; through the threadsafe sdl:push-user-event instead!
-                                   (lambda (move)
-                                     (update-move move))
-                                   (lambda ()
-                                     (setq minimax-deciding nil)
-                                     (commit-move)))))
+                 (sb-thread:make-thread (lambda ()
+                                          (minimax-decision (copy-state state)
+                                                            ;; FIXME: the below are called from another thread. communicate
+                                                            ;; through the threadsafe sdl:push-user-event instead!
+                                                            (lambda (move)
+                                                              (update-move move))
+                                                            (lambda ()
+                                                              (setq minimax-deciding nil)
+                                                              (commit-move))))
+                                        :name "worker thread")))
         (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
         (fresh-move)
         ;; interface: left-click to build a move (first click chooses the piece
@@ -106,7 +107,7 @@
     (spsa nsteps
           (lambda (weights)
             (- (log (measure-performance
-                     (make-minimax-player (make-learned-evaluator initial-weights))
+                     (make-minimax-player (make-learned-evaluator weights))
                      opponent nsamples)
                     2)))
           initial-weights)))
