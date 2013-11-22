@@ -4,11 +4,11 @@
 
 ;; TODO: handle end-of-game
 (defun main (&optional (state (make-initial-state)) (breadcrumbs '()))
-  (let (all-moves submove supermoves minimax-deciding)
+  (let (all-moves submove supermoves computer-deciding)
     (sdl:with-init ()
       (labels ((redraw ()
                  (sdl:clear-display *background-color*)
-                 (draw-state state minimax-deciding)
+                 (draw-state state computer-deciding)
                  (draw-move submove)
                  (sdl:update-display))
                (fresh-move ()
@@ -37,17 +37,28 @@
                  (unapply-move state (pop breadcrumbs))
                  (fresh-move))
                (minimax-move ()
-                 (setq minimax-deciding t)
+                 (minimax-decision state
+                                   ;; XXX: this is not threadsafe, but we'll live with it.  the other
+                                   ;; option would be to communicate the information to the event thread
+                                   ;; with sdl:push-user-event, but we can only pass a couple of numbers
+                                   ;; through there.  it's not worth the trouble.
+                                   :updater (lambda (move)
+                                              (update-move move))
+                                   :committer (lambda ()
+                                                (setq computer-deciding nil)
+                                                (commit-move))))
+               (mcts-move ()
+                 (update-move (mcts-decision state))
+                 (setq computer-deciding nil)
+                 (commit-move))
+               (computer-move (algorithm)
+                 (setq computer-deciding t)
+                 (redraw)
                  (sb-thread:make-thread
                   (lambda ()
-                    (time-limited 10 (lambda ()
-                                       (minimax-decision state
-                                                         ;; FIXME: communicate through the threadsafe sdl:push-user-event instead!
-                                                         :updater (lambda (move)
-                                                                    (update-move move))
-                                                         :committer (lambda ()
-                                                                      (setq minimax-deciding nil)
-                                                                      (commit-move))))))
+                    (time-limited 10 (ccase algorithm
+                                       (:minimax #'minimax-move)
+                                       (:mcts #'mcts-move))))
                   :name "worker thread")))
         (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
         (fresh-move)
@@ -60,26 +71,27 @@
         (sdl:with-events ()
           (:quit-event () t)
           (:key-up-event
-           (:state s :scancode scancode :key key :mod mod :unicode unicode)
-           (declare (ignore s scancode unicode mod))
+           (:key key)
            (cond ((sdl:key= key :sdl-key-space)
-                  (unless minimax-deciding
+                  (unless computer-deciding
                     (commit-move)))
                  ((sdl:key= key :sdl-key-z)
-                  (unless minimax-deciding
+                  (unless computer-deciding
                     (when (intersection (sdl:get-mods-state) (list :sdl-key-mod-lctrl :sdl-key-mod-rctrl))
                       (undo-move))))
-                 ((sdl:key= key :sdl-key-c)
-                  (unless minimax-deciding
-                    (minimax-move)))))
+                 ((sdl:key= key :sdl-key-f1)
+                  (unless computer-deciding
+                    (computer-move :minimax)))
+                 ((sdl:key= key :sdl-key-f2)
+                  (unless computer-deciding
+                    (computer-move :mcts)))))
           (:mouse-button-up-event
-           (:button button :state s :x x :y y)
-           (declare (ignore s))
+           (:button button :x x :y y)
            (cond ((= button sdl:sdl-button-left)
-                  (unless minimax-deciding
+                  (unless computer-deciding
                     (update-move (append submove (list (board-position (v x y)))))))
                  ((= button sdl:sdl-button-right)
-                  (unless minimax-deciding
+                  (unless computer-deciding
                     (update-move (butlast submove 1))))))
           (:video-expose-event () (sdl:update-display)))))))
 
