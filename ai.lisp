@@ -70,7 +70,9 @@
       (cons move (delete move moves :test #'move-equal)))
     moves))
 
-(defun minimax (state depth evaluator alpha beta &aux (original-alpha alpha))
+(defun minimax (state depth evaluator
+                &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
+                &aux (original-alpha alpha))
   (when *out-of-time*
     (throw :out-of-time nil))
   (when-let ((transposition (lookup-transposition state)))
@@ -135,10 +137,17 @@
       (let ((*transposition-table* (make-hash-table :test 'state-equal))
             (state (copy-state state)))
         (iter (for depth from 0)
-              (multiple-value-setq (value best-move)
-                (minimax state depth evaluator *evaluation-minimum* *evaluation-maximum*))
+              (multiple-value-setq (value best-move) (minimax state depth evaluator))
               (print (list depth (ungranularize value) best-move))
               (unless *out-of-time* ;; this *could* happen...
                 (funcall updater best-move)))))
     (funcall committer)
     best-move))
+
+(defun evaluation-decision (state &key (evaluator #'evaluate-state))
+  (iter (for move in (moves state))
+        (for breadcrumb = (apply-move state move))
+        (finding move maximizing (funcall evaluator state (moves state))
+                 into (best-move value))
+        (unapply-move state breadcrumb)
+        (finally (return best-move))))

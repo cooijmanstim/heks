@@ -3,10 +3,8 @@
 (declaim (optimize (debug 3)))
 
 ;; TODO: handle end-of-game
-(defun main ()
-  (let ((state (make-initial-state))
-        all-moves submove supermoves breadcrumbs
-        minimax-deciding)
+(defun main (&optional (state (make-initial-state)) (breadcrumbs '()))
+  (let (all-moves submove supermoves minimax-deciding)
     (sdl:with-init ()
       (labels ((redraw ()
                  (sdl:clear-display *background-color*)
@@ -100,16 +98,25 @@
             (format-vector stream (state->vector state))
             (decf n)))))
 
-;; use spsa to maximize win probability against opponent
+;; use spsa to maximize win count against opponent when using the evaluation
+;; function in a 1-ply minimax search
 (defun learn-feature-weights (opponent initial-weights)
-  (let ((decision-time 1)
-        (nsteps 10)
-        (nsamples 30))
-    (spsa nsteps
-          (lambda (weights)
-            (- (log (measure-performance
-                     (lambda (state)
-                       (minimax-decision state :duration decision-time :evaluator (make-learned-evaluator weights)))
-                     opponent nsamples)
-                    2)))
-          initial-weights)))
+  (let* ((nsteps 1000)
+         (nsamples 30))
+    (labels ((make-player (weights)
+               (lambda (state)
+                 (evaluation-decision state :evaluator (make-learned-evaluator weights))))
+             (performance (weights)
+               (multiple-value-bind (mean stdev)
+                   (measure-performance (make-player weights) opponent nsamples)
+                 (values mean stdev)))
+             (goodness (weights)
+               (+ (* 0.1 (vector-norm weights :l 1))
+                  (* 0.9 (- (performance weights))))))
+      (multiple-value-bind (initial-mean initial-stdev) (performance initial-weights)
+        (let ((final-weights (spsa nsteps #'goodness initial-weights :c (+ initial-stdev 1e-3))))
+          (multiple-value-bind (final-mean final-stdev) (performance final-weights)
+            (fresh-line)
+            (format t "optimized performance from ~D (±~D) to ~D (±~D)~%"
+                    initial-mean initial-stdev final-mean final-stdev)
+            final-weights))))))

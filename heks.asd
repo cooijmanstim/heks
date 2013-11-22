@@ -12,7 +12,7 @@
   :maintainer "Tim Cooijmans <t.cooijmans@student.maastrichtuniversity.nl>"
   :licence "GPL"
   :depends-on (:alexandria :lisp-unit :cl-utilities :iterate
-                           :lispbuilder-sdl)
+                           :cl-ppcre :lispbuilder-sdl)
   :serial t
   :components
   ((:file "package")

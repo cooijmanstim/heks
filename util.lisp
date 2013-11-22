@@ -101,3 +101,7 @@
   (and (<= (s1 v) s)
        (<= (s2 v) s)))
 
+(defun vector-norm (vector &key (l 2))
+  (expt (iter (for x in-vector vector)
+              (sum (expt (abs x) l)))
+        (/ 1 l)))
