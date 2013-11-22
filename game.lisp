@@ -159,31 +159,26 @@
                      (finally (return captures)))))
       (recur ij '()))))
 
-;;; NOTE: a move is a list (x y z ...) of points visited,
-;;; and everything between the points is captured
-;;; NOTE: capturing is mandatory, so if captures have been found, we skip
-;;; finding moves
+;;; a move is a list (x y z ...) of points visited, and everything between the points is captured
+;;; NOTE: potentially modifies state; sets endp if no moves. this is unconditionally set to nil by
+;;; unapply-move.
 (defun moves (state)
-  (let ((board    (state-board    state))
-        (player   (state-player   state)))
-    (iter (for i from 1 below (- *board-size* 1))
-          (for subresult = (iter (for j from 1 below (- *board-size* 1))
-                                 (for ij = (cons i j))
-                                 (for tile = (board-tile board ij))
-                                 (for owner = (tile-owner tile))
-                                 (when (eq owner player)
-                                   (nconcing (piece-captures board ij) into captures)
-                                   (unless captures
-                                     (nconcing (piece-moves board ij) into moves)))
-                                 (finally (return (cons captures moves)))))
-          (nconcing (car subresult) into captures)
-          (unless captures
-            (nconcing (cdr subresult) into moves))
+  (with-slots (board player endp) state
+    (iter (for tile at ij of board)
+          (with-slots (owner) tile
+            (when (eq owner player)
+              (nconcing (piece-captures board ij) into captures)
+              (unless captures
+                (nconcing (piece-moves board ij) into moves))))
           (finally
-           (return (if (null captures)
-                       moves
+           (return (if captures
                        ;; longest capture is mandatory
-                       (cl-utilities:extrema captures #'> :key #'length)))))))
+                       (cl-utilities:extrema captures #'> :key #'length)
+                       (progn
+                         ;; if no moves, mark the game as over
+                         (when (null moves)
+                           (setf endp t))
+                         moves)))))))
 
 
 ;;; MOVE APPLICATION
@@ -196,55 +191,54 @@
   (crowned nil :type boolean))
 
 (defun apply-move (state move)
-  (assert (not (null move)))
-  (let* ((board (state-board state))
-         (player (state-player state))
-         (initial-tile (board-tile board (car move)))
-         (moving-object (tile-object initial-tile))
-         (can-fly (can-fly moving-object))
-         (capture-points '()))
-    (assert (eq player (tile-owner initial-tile)))
-    (assert (member moving-object '(:man :king)))
-    ;; trace the path to figure out what's captured. might as well
-    ;; do some validity checking. the checks here are safety nets
-    ;; rather than guarantees. men's backward movement is not prevented,
-    ;; mandatory captures are not enforced.
-    (setq capture-points
-          (iter (for next-ij in (rest move))
-                (for prev-ij previous next-ij initially (first move))
-                (nconcing
-                    (multiple-value-bind (didj n) (displacement-direction prev-ij next-ij)
-                      (assert (member didj *all-directions* :test #'v=))
-                      ;; the only condition on the last tile is that it is empty
-                      (assert (eq :empty (tile-object (board-tile board next-ij))))
-                      ;; conditions on the rest of the tiles
-                      (iter (for k from 1 below n)
-                            (for ij = (v+v prev-ij (s*v k didj)))
-                            (for tile = (board-tile board ij))
-                            (with capture-point = nil)
-                            (ccase (tile-object tile)
-                              (:empty
-                               (assert can-fly))
-                              ((:man :king)
-                               (assert (not (or capture-point (eq (tile-owner tile) player))))
-                               (setq capture-point ij)))
-                            (finally (return
-                                       (if capture-point
-                                           (list capture-point)
-                                           '()))))))))
-    ;; now modify state
-    (displace-piece state (car move) (lastcar move))
-    (toggle-player state)
-    (let ((capture-tiles (mapcar (lambda (ij)
-                                   (remove-piece state ij))
-                                 capture-points))
-          (crowned (maybe-crown state move)))
-      ;; return undo info
-      (make-breadcrumb :move move
-                       :capture-points capture-points
-                       :capture-tiles capture-tiles
-                       :crowned crowned))))
-
+  (with-slots (board player endp) state
+    (assert (and move (not (state-endp state))))
+    (let* ((initial-tile (board-tile board (car move)))
+           (moving-object (tile-object initial-tile))
+           (can-fly (can-fly moving-object))
+           (capture-points '()))
+      (assert (eq player (tile-owner initial-tile)))
+      (assert (member moving-object '(:man :king)))
+      ;; trace the path to figure out what's captured. might as well
+      ;; do some validity checking. the checks here are safety nets
+      ;; rather than guarantees. men's backward movement is not prevented,
+      ;; mandatory captures are not enforced.
+      (setq capture-points
+            (iter (for next-ij in (rest move))
+                  (for prev-ij previous next-ij initially (first move))
+                  (nconcing
+                   (multiple-value-bind (didj n) (displacement-direction prev-ij next-ij)
+                     (assert (member didj *all-directions* :test #'v=))
+                     ;; the only condition on the last tile is that it is empty
+                     (assert (eq :empty (tile-object (board-tile board next-ij))))
+                     ;; conditions on the rest of the tiles
+                     (iter (for k from 1 below n)
+                           (for ij = (v+v prev-ij (s*v k didj)))
+                           (with capture-point = nil)
+                           (with-slots (object owner) (board-tile board ij)
+                             (ccase object
+                               (:empty
+                                (assert can-fly))
+                               ((:man :king)
+                                (assert (not (or capture-point (eq owner player))))
+                                (setq capture-point ij)))
+                             (finally (return
+                                        (if capture-point
+                                            (list capture-point)
+                                            '())))))))))
+      ;; now modify state
+      (displace-piece state (car move) (lastcar move))
+      (toggle-player state)
+      (let ((capture-tiles (mapcar (lambda (ij)
+                                     (remove-piece state ij))
+                                   capture-points))
+            (crowned (maybe-crown state move)))
+        ;; return undo info
+        (make-breadcrumb :move move
+                         :capture-points capture-points
+                         :capture-tiles capture-tiles
+                         :crowned crowned)))))
+  
 (defun unapply-move (state breadcrumb)
   (with-slots (move capture-points capture-tiles crowned) breadcrumb
     (iter (for ij in capture-points)
@@ -253,5 +247,6 @@
     (when crowned
       (uncrown state move))
     (displace-piece state (lastcar move) (car move))
-    (toggle-player state)))
+    (toggle-player state))
+  (setf (state-endp state) nil))
 

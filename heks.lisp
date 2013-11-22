@@ -40,14 +40,14 @@
                  (setq minimax-deciding t)
                  (sb-thread:make-thread
                   (lambda ()
-                    (minimax-decision state
-                                      :duration 10
-                                      ;; FIXME: communicate through the threadsafe sdl:push-user-event instead!
-                                      :updater (lambda (move)
-                                                 (update-move move))
-                                      :committer (lambda ()
-                                                   (setq minimax-deciding nil)
-                                                   (commit-move))))
+                    (time-limited 10 (lambda ()
+                                       (minimax-decision state
+                                                         ;; FIXME: communicate through the threadsafe sdl:push-user-event instead!
+                                                         :updater (lambda (move)
+                                                                    (update-move move))
+                                                         :committer (lambda ()
+                                                                      (setq minimax-deciding nil)
+                                                                      (commit-move))))))
                   :name "worker thread")))
         (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
         (fresh-move)

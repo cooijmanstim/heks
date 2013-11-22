@@ -105,3 +105,15 @@
   (expt (iter (for x in-vector vector)
               (sum (expt (abs x) l)))
         (/ 1 l)))
+
+;; fn must poll *out-of-time* and return when it becomes true
+(defparameter *out-of-time* nil)
+(defun time-limited (duration fn)
+  (setq *out-of-time* nil)
+  (sb-thread:make-thread
+   (lambda ()
+     (sleep duration)
+     (setq *out-of-time* t)
+     (sb-thread:thread-yield))
+   :name "timer thread")
+  (funcall fn))

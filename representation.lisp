@@ -22,14 +22,6 @@
     (:man nil)
     (:king t)))
 
-(defun crown-p (tile ij)
-  (with-slots (object owner) tile
-    (and (eq object :man)
-         (ccase owner
-           (:black (or (= (s1 ij) 1) (= (s2 ij) 1)))
-           (:white (or (= (s1 ij) (- *board-size* 2))
-                       (= (s2 ij) (- *board-size* 2))))))))
-
 
 ; XXX: it is assumed that owner is non-nil iff object is :man or :king
 (defstruct (tile (:constructor make-tile (object &optional owner)) (:copier nil))
@@ -98,6 +90,15 @@
           ((absv<=s kl 3) (make-tile :man :black))
           (t (make-tile :empty)))))
 
+(defun crown-p (tile ij)
+  (with-slots (object owner) tile
+    (and (eq object :man)
+         (ccase owner
+           (:black (or (= (s1 ij) 1) (= (s2 ij) 1)))
+           (:white (or (= (s1 ij) (- *board-size* 2))
+                       (= (s2 ij) (- *board-size* 2))))))))
+
+
 (defun make-initial-board ()
   (let ((board (make-array (v->list *board-dimensions*)
                            :element-type 'tile
@@ -133,6 +134,7 @@
 (defstruct (state (:constructor nil) (:copier nil))
   (board #() :type (array tile))
   (player :white :type player)
+  (endp nil :type boolean)
   (hash 0 :type integer))
 
 (defun make-state (&optional
@@ -160,3 +162,7 @@
        (= (state-hash a) (state-hash b))
        (board-equal (state-board a) (state-board b))))
 
+(defun state-winner (state)
+  (with-slots (endp player) state
+    (assert endp)
+    (opponent player)))

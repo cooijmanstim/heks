@@ -61,7 +61,6 @@
     (setf (gethash (copy-state state) *transposition-table*)
           (make-transposition))))
 
-(defparameter *out-of-time* nil)
 (defparameter *minimax-decision-time* 10)
 
 (defun order-moves (state moves)
@@ -120,17 +119,7 @@
           (setf d depth move best-move)))
       (values value best-move))))
 
-(defun minimax-decision (state &key (duration 10)
-                         (updater #'no-op)
-                         (committer #'no-op)
-                         (evaluator #'evaluate-state))
-  (setq *out-of-time* nil)
-  (sb-thread:make-thread
-   (lambda ()
-     (sleep duration)
-     (setq *out-of-time* t)
-     (sb-thread:thread-yield))
-   :name "timer thread")
+(defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state))
   (let (value best-move)
     (catch :out-of-time
       ;; use a fresh table with every top-level search
@@ -151,3 +140,86 @@
                  into (best-move value))
         (unapply-move state breadcrumb)
         (finally (return best-move))))
+
+(defstruct (mcts-node (:constructor nil))
+  (move nil)
+  (parent nil :type (or null mcts-node))
+  (children '() :type list)
+  (nwins 0 :type integer)
+  (nvisits 0 :type integer)
+  (untried-moves '() :type list)
+  (last-player nil :type (or null player)))
+
+(defun make-mcts-node (state &optional move parent)
+  (let ((node (make-instance 'mcts-node)))
+    (with-slots ((m move) (p parent) untried-moves last-player) node
+      (setf m move
+            p parent
+            untried-moves (moves state)
+            last-player (opponent (state-player state))))
+    node))
+
+(defun uct-child (node)
+  (with-slots (children (parent-nvisits nvisits)) node
+    (labels ((uct-score (node)
+               (with-slots (nwins nvisits) node
+                   (+ (/ nwins nvisits)
+                      (sqrt (/ (* 2 (log parent-nvisits))
+                               nvisits))))))
+      (extremum children #'> :key #'uct-score))))
+
+(defun add-child (parent move state)
+  (let ((node (make-mcts-node state move parent)))
+    (with-slots (untried-moves children) parent
+      (setf untried-moves (delete move untried-moves :test #'move-equal))
+      (push node children))
+    node))
+
+(defun mcts-update (node winner)
+  (with-slots (last-player nvisits nwins) node
+    (incf nvisits)
+    (incf nwins (if (null winner)
+                    1/2
+                    (if (eq winner last-player)
+                        1
+                        0)))))
+
+(defparameter *mcts-maximum-depth* 200)
+(defun mcts-decision (root-state &optional (n most-positive-fixnum))
+  (assert (not (state-endp root-state)))
+  (let ((root-node (make-mcts-node root-state)))
+    (labels ((select (node state)
+               (iter (while (and (emptyp (mcts-node-untried-moves node))
+                                 (not (emptyp (mcts-node-children node)))))
+                     (setq node (uct-child node))
+                     (apply-move state (mcts-node-move node)))
+               node)
+             (expand (node state)
+               (with-slots (untried-moves) node
+                 (unless (emptyp untried-moves)
+                   (let ((move (random-elt untried-moves)))
+                     (apply-move state move)
+                     (setf node (add-child node move state)))))
+               node)
+             (rollout (state)
+               (iter (for moves = (moves state))
+                     (for depth from 0)
+                     (until (emptyp moves))
+                     ;; no winner
+                     (when (> depth *mcts-maximum-depth*)
+                       (return-from rollout nil))
+                     (apply-move state (random-elt moves)))
+               (state-winner state))
+             (backprop (node winner)
+               (iter (while node)
+                     (mcts-update node winner)
+                     (setq node (mcts-node-parent node)))))
+      (iter (repeat n)
+            (until *out-of-time*)
+            (for node = root-node)
+            (for state = (copy-state root-state))
+            (setf node (select node state))
+            (setf node (expand node state))
+            (backprop node (rollout state))))
+    (with-slots (children) root-node
+      (mcts-node-move (extremum children #'> :key #'mcts-node-nvisits)))))
