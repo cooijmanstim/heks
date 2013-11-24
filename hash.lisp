@@ -6,61 +6,59 @@
 (defun zobrist-bitstring ()
   (random *zobrist-ceiling*))
 
-(defparameter *zobrist-bitstrings*
-  ;; TODO: board-size - 1? something stinks here
-  (let ((positions (make-array (list (- *board-size* 1) (- *board-size* 1) 2 2)
-                               :element-type 'fixnum
-                               :adjustable nil))
-        (black-to-move (zobrist-bitstring)))
-    (iter (for i from 1 below (- *board-size* 1))
-          (iter (for j from 1 below (- *board-size* 1))
-                (iter (for player in '(:white :black))
-                      (for k from 0)
-                      (iter (for object in '(:man :king))
-                            (for l from 0)
-                            (setf (aref positions i j k l) (zobrist-bitstring))))))
-    (list positions black-to-move)))
+(defparameter *zobrist-bitstring-positions*
+  (let ((positions (make-linear-array (append (v->list *board-dimensions*) (list 2 2))
+                                      :element-type 'fixnum
+                                      :initial-element 0
+                                      :adjustable nil))
+        (board (make-initial-board))) ;; to make looping easier
+    (iter (for tile at ij of board)
+          (iter (for player in '(:white :black))
+                (for k from 0)
+                (iter (for object in '(:man :king))
+                      (for l from 0)
+                      (setf (linear-aref positions (s1 ij) (s2 ij) k l) (zobrist-bitstring)))))
+    positions))
+(defparameter *zobrist-bitstring-black-to-move* (zobrist-bitstring))
 
 ;; desperately-TODO: stop using keywords for white/black and man/king
 (defun tile-zobrist-bitstring (tile ij)
   (with-slots (object owner) tile
     (if (not (member object '(:man :king)))
         0
-        (aref (first *zobrist-bitstrings*)
-              (s1 ij) (s2 ij)
-              (ccase owner
-                (:white 0)
-                (:black 1))
-              (ccase object
-                (:man 0)
-                (:king 1))))))
+        (linear-aref *zobrist-bitstring-positions*
+                     (s1 ij) (s2 ij)
+                     (ccase owner
+                       (:white 0)
+                       (:black 1))
+                     (ccase object
+                       (:man 0)
+                       (:king 1))))))
 
 (defun zobrist-player-bitstring ()
-  (second *zobrist-bitstrings*))
+  *zobrist-bitstring-black-to-move*)
 
-(define-modify-macro logxorf (&rest numbers) logxor)
+(defun zobrist-position-bitstring (tile ij)
+  (if-let ((k (case (tile-owner tile)
+                (:white 0)
+                (:black 1)
+                (otherwise nil)))
+           (l (case (tile-object tile)
+                (:man 0)
+                (:king 1)
+                (otherwise nil))))
+    (linear-aref *zobrist-bitstring-positions* (s1 ij) (s2 ij) k l)
+    0))
 
 (defun zobrist-hash-board (board)
-  (let ((hash 0)
-        (zobrist-bitstrings (first *zobrist-bitstrings*)))
-    (iter (for i from 1 below (- *board-size* 1))
-          (iter (for j from 1 below (- *board-size* 1))
-                (for tile = (board-tile board (v i j)))
-                (for k = (case (tile-owner tile)
-                           (:white 0)
-                           (:black 1)
-                           (otherwise nil)))
-                (for l = (case (tile-object (board-tile board (v i j)))
-                           (:man 0)
-                           (:king 1)
-                           (otherwise nil)))
-                (when (and k l)
-                  (logxorf hash (aref zobrist-bitstrings i j k l)))))
+  (let ((hash 0))
+    (iter (for tile at ij of board)
+          (logxorf hash (zobrist-position-bitstring tile ij)))
     hash))
 
 (defun zobrist-hash-player (player)
   (if (eq player :black)
-      (second *zobrist-bitstrings*)
+      *zobrist-bitstring-black-to-move*
       0))
 
 (defun zobrist-hash (state)

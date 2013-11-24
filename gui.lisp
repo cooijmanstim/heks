@@ -63,9 +63,8 @@
                *board-center*))))
 
 (defun draw-board (board)
-  (iter (for i from 1 below (- *board-size* 1))
-        (iter (for j from 1 below (- *board-size* 1))
-              (draw-tile (aref board i j) (window-position (v i j))))))
+  (iter (for tile at ij of board)
+        (draw-tile tile (window-position ij))))
 
 (defun draw-character (character xs)
   (let ((xs (v-v xs (s*v 1/2 *font-dimensions*))))

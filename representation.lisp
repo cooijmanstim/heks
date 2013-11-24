@@ -47,13 +47,19 @@
 (defparameter *board-dimensions* (v *board-size* *board-size*))
 (defparameter *board-center* (s+v -1/2 (s*v 1/2 *board-dimensions*)))
 
-(deftype board () `(array tile ,(v->list *board-dimensions*)))
+(deftype board () 'linear-array)
 
-(declaim (inline board-tile set-board-tile))
+(defun board-rmi->ij (board rmi)
+  (list->v (linear-array-subscripts board rmi)))
+
+(defun board-ij->rmi (board ij)
+  (linear-array-index board (s1 ij) (s2 ij)))
+
+;(declaim (inline board-tile set-board-tile))
 (defun board-tile (board ij)
-  (aref board (s1 ij) (s2 ij)))
+  (linear-aref board (s1 ij) (s2 ij)))
 (defun set-board-tile (board ij value)
-  (setf (aref board (s1 ij) (s2 ij)) value))
+  (setf (linear-aref board (s1 ij) (s2 ij)) value))
 (defsetf board-tile set-board-tile)
 
 ;; iter clause for iterating over board interior
@@ -66,7 +72,7 @@
       `(progn
          (with ,playervar = ,playerexpr)
          (with ,boardvar = ,boardexpr)
-         (with ,maxrmivar = (array-total-size ,boardvar))
+         (with ,maxrmivar = (linear-array-size ,boardvar))
          (with ,rmivar = 0)
          (declare (fixnum ,rmivar ,maxrmivar))
          (,keyword ,ijvar
@@ -74,12 +80,11 @@
                           (incf ,rmivar)
                           (when (>= ,rmivar ,maxrmivar)
                             (terminate))
-                          (list->v
-                           (array-index-row-major ,boardvar
-                                                  (if (eq ,playervar :black)
-                                                      (- ,maxrmivar ,rmivar 1)
-                                                      ,rmivar)))))
-         (,keyword ,tilevar next (board-tile ,boardvar ,ijvar))
+                          (board-rmi->ij ,boardvar
+                                         (if (eq ,playervar :black)
+                                             (- ,maxrmivar ,rmivar 1)
+                                             ,rmivar))))
+         (,keyword ,tilevar next (linear-vref ,boardvar ,rmivar))
          (when (eq (tile-object ,tilevar) :void)
            (next-iteration))))))
 
@@ -88,7 +93,9 @@
          (ij (s+v -1 ij))
          ;; cumulative inverse coordinates
          (kl (s+v -1 (v-v board-interior-dimensions ij))))
-    (cond ((or (<= (+ (s2 kl) (s1 ij)) 3)
+    (cond ((or (< (s1 ij) 0) (< (s2 ij) 0)
+               (< (s1 kl) 0) (< (s2 kl) 0)
+               (<= (+ (s2 kl) (s1 ij)) 3)
                (<= (+ (s1 kl) (s2 ij)) 3)) (make-tile :void))
           ((absv<=s ij 3) (make-tile :man :white))
           ((absv<=s kl 3) (make-tile :man :black))
@@ -104,39 +111,36 @@
 
 
 (defun make-initial-board ()
-  (let ((board (make-array (v->list *board-dimensions*)
-                           :element-type 'tile
-                           :initial-element (make-tile :void)
-                           :adjustable nil)))
-    (iter (for i from 1 below (- *board-size* 1))
-          (iter (for j from 1 below (- *board-size* 1))
-                (setf (aref board i j) (initial-tile (v i j)))))
+  (let ((board (make-linear-array (v->list *board-dimensions*)
+                                  :element-type 'tile
+                                  :initial-element (make-tile :void)
+                                  :adjustable nil)))
+    (iter (for rmi index-of-linear-array board)
+          (for ij = (list->v (linear-array-subscripts board rmi)))
+          (setf (board-tile board ij) (initial-tile ij)))
     board))
 
 (defun make-empty-board ()
   (let ((board (make-initial-board)))
-    (iter (for i from 1 below (- *board-size* 1))
-          (iter (for j from 1 below (- *board-size* 1))
-                (unless (eq (tile-object (aref board i j)) :void)
-                  (setf (aref board i j) (make-tile :empty)))))
+    (iter (for tile at ij of board)
+          (setf (board-tile board ij) (make-tile :empty)))
     board))
 
 (defun copy-board (board)
-  (let ((board2 (make-array (array-dimensions board)
-                            :element-type 'tile
-                            :adjustable nil)))
-    (iter (for i from 0 below *board-size*)
-          (iter (for j from 0 below *board-size*)
-                (setf (aref board2 i j) (copy-tile (aref board i j)))))
+  (let ((board2 (make-linear-array (linear-array-dimensions board)
+                                   :element-type 'tile
+                                   :adjustable nil)))
+    (iter (for rmi index-of-linear-array board)
+          (setf (linear-vref board2 rmi) (copy-tile (linear-vref board rmi))))
     board2))
 
-(defun board-equal (a b)
-  (iter (for i from 0 below *board-size*)
-        (iter (for j from 0 below *board-size*)
-              (always (tile-equal (aref a i j) (aref b i j))))))
+(defun board-equal (board1 board2)
+  (iter (for tile1 in-linear-array board1)
+        (for tile2 in-linear-array board2)
+        (always (tile-equal tile1 tile2))))
 
 (defstruct (state (:constructor nil) (:copier nil))
-  (board #() :type (array tile))
+  (board nil :type (or null linear-array))
   (player :white :type player)
   (endp nil :type boolean)
   (hash 0 :type integer))
@@ -157,9 +161,8 @@
   (make-state))
 
 (defun copy-state (state)
-  (make-state (copy-board (state-board state))
-              (state-player state)
-              (state-hash state)))
+  (with-slots (board player hash) state
+    (make-state (copy-board board) player hash)))
 
 (defun state-equal (a b)
   (and (eq (state-player a) (state-player b))

@@ -40,14 +40,7 @@
 (defun no-op (&rest args)
   (declare (ignore args)))
 
-;; inverse of array-row-major-index
-;; taken from comp.lang.lisp
-(defun array-index-row-major (array rmi)
-  (do ((subs (list rmi) (cons q (rplaca subs r)))
-       (dims (reverse (cdr (array-dimensions array))) (cdr dims))
-       q r)
-      ((null dims) subs)
-    (multiple-value-setq (q r) (truncate (car subs) (car dims)))))
+(define-modify-macro logxorf (&rest numbers) logxor)
 
 ; TODO: use array rather than cons?
 (defun v (x y)

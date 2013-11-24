@@ -17,6 +17,7 @@
   :components
   ((:file "package")
    (:file "util")
+   (:file "linear-array")
    (:file "representation")
    (:file "hash")
    (:file "game")
