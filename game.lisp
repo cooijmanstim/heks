@@ -104,6 +104,8 @@
   (not (mismatch a b :test #'v=)))
 
 (defun piece-moves (board ij)
+  (declare (optimize (speed 3) (safety 1))
+           (type board board))
   (let ((tile (board-tile board ij)))
     (ccase (tile-object tile)
       (:man
@@ -115,11 +117,12 @@
        (iter (for didj in *all-directions*)
              (nconcing (iter (for d from 1)
                              (for ij2 = (v+v ij (s*v d didj)))
+                             (declare (fixnum d))
                              (while (eq (tile-object (board-tile board ij2)) :empty))
                              (collect (list ij ij2)))))))))
 
 (defun piece-captures (board ij)
-  (declare (optimize (speed 3) (safety 0))
+  (declare (optimize (speed 3) (safety 1))
            (type board board))
   (let* ((tile (board-tile board ij))
          (player (tile-owner tile))
@@ -164,7 +167,7 @@
 ;;; NOTE: potentially modifies state; sets endp if no moves. this is unconditionally set to nil by
 ;;; unapply-move.
 (defun moves (state)
-  (declare (optimize (speed 3) (safety 0)))
+  (declare (optimize (debug 3) (safety 1)))
   (with-slots (board player endp) state
     (declare (type board board))
     (iter (for tile at ij of board)

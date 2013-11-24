@@ -96,6 +96,17 @@
         (assert-equality #'v= ij (board-position (window-position ij))))
   (assert-equality #'v= *window-center* (window-position *board-center*)))
 
+(define-test tile-equal
+  (iter (repeat 5)
+        (for ij = (vmap #'random *board-dimensions*))
+        (assert-equality #'tile-equal (initial-tile ij) (initial-tile ij))))
+
+(define-test board-equal
+  (assert-equality #'board-equal (make-initial-board) (make-initial-board)))
+
+(define-test copy-board
+  (assert-equality #'board-equal (make-initial-board) (copy-board (make-initial-board))))
+
 (define-test displacement-direction
   (iter (repeat 2)
         (for ij = (v (random 10) (random 10)))
@@ -232,7 +243,8 @@
                 (unapply-move state breadcrumb)
                 (assert-equal (zobrist-hash state) (state-hash state))))))
 
-(define-test spsa
+;; commented out because verbose
+'(define-test spsa
   (labels ((f (x)
              ;; a convex quadratic function with minimum at 0
              (let ((H #2A((5 4 3)

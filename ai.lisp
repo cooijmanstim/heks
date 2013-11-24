@@ -50,7 +50,7 @@
 (defparameter *transposition-table* nil)
 ;; store only deep transpositions to save memory.  shallow transpositions are used much more
 ;; often, but there are many more of them.  TODO: handle out of memory properly
-(defparameter *transposition-minimum-depth* 5)
+(defparameter *transposition-minimum-depth* 3)
 
 (defun lookup-transposition (state)
   (gethash state *transposition-table*))

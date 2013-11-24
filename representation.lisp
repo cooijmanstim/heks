@@ -128,13 +128,16 @@
     (iter (for i from 0 below (s1 *board-dimensions*))
           (iter (for j from 0 below (s2 *board-dimensions*))
                 (for ij = (v i j))
-                (setf (board-tile board ij) (copy-tile (board-tile board ij)))))
+                (setf (board-tile board2 ij) (copy-tile (board-tile board ij)))))
     board2))
 
 (defun board-equal (board1 board2)
-  (iter (for tile1 at ij1 of board1)
-        (for tile2 at ij2 of board2)
-        (always (tile-equal tile1 tile2))))
+  (iter (for i from 0 below (s1 *board-dimensions*))
+        (always
+         (iter (for j from 0 below (s2 *board-dimensions*))
+               (for ij = (v i j))
+               (always (tile-equal (board-tile board1 ij)
+                                   (board-tile board2 ij)))))))
 
 (defstruct (state (:constructor nil) (:copier nil))
   (board nil :type (or null board))
