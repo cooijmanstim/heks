@@ -7,15 +7,15 @@
   (random *zobrist-ceiling*))
 
 (defparameter *zobrist-bitstring-positions*
-  (let ((positions (make-linear-array (append (v->list *board-dimensions*) (list 2 2))
-                                      :element-type 'fixnum :initial-element 0))
+  (let ((positions (make-array (append (v->list *board-dimensions*) (list 2 2))
+                               :element-type 'fixnum :initial-element 0))
         (board (make-initial-board))) ;; to make looping easier
     (iter (for tile at ij of board)
           (iter (for player in '(:white :black))
                 (for k from 0)
                 (iter (for object in '(:man :king))
                       (for l from 0)
-                      (setf (linear-aref positions (s1 ij) (s2 ij) k l) (zobrist-bitstring)))))
+                      (setf (aref positions (s1 ij) (s2 ij) k l) (zobrist-bitstring)))))
     positions))
 (defparameter *zobrist-bitstring-black-to-move* (zobrist-bitstring))
 
@@ -24,14 +24,14 @@
   (with-slots (object owner) tile
     (if (not (member object '(:man :king)))
         0
-        (linear-aref *zobrist-bitstring-positions*
-                     (s1 ij) (s2 ij)
-                     (ccase owner
-                       (:white 0)
-                       (:black 1))
-                     (ccase object
-                       (:man 0)
-                       (:king 1))))))
+        (aref *zobrist-bitstring-positions*
+              (s1 ij) (s2 ij)
+              (ccase owner
+                (:white 0)
+                (:black 1))
+              (ccase object
+                (:man 0)
+                (:king 1))))))
 
 (defun zobrist-player-bitstring ()
   *zobrist-bitstring-black-to-move*)
@@ -45,7 +45,7 @@
                 (:man 0)
                 (:king 1)
                 (otherwise nil))))
-    (linear-aref *zobrist-bitstring-positions* (s1 ij) (s2 ij) k l)
+    (aref *zobrist-bitstring-positions* (s1 ij) (s2 ij) k l)
     0))
 
 (defun zobrist-hash-board (board)
@@ -62,4 +62,3 @@
 (defun zobrist-hash (state)
   (logxor (zobrist-hash-board (state-board state))
           (zobrist-hash-player (state-player state))))
-

@@ -71,7 +71,8 @@
     (far-pop l)
     (assert-equal '(1) l)))
 
-(define-test board-rmi->ij
+;; only makes sense if using a linear-array representation for board
+'(define-test board-rmi->ij
   (iter (repeat 5)
         (with board = (make-initial-board))
         (for ij = (vmap #'random *board-dimensions*))

@@ -47,19 +47,13 @@
 (defparameter *board-dimensions* (v *board-size* *board-size*))
 (defparameter *board-center* (s+v -1/2 (s*v 1/2 *board-dimensions*)))
 
-(deftype board () 'linear-array)
-
-(defun board-rmi->ij (board rmi)
-  (list->v (linear-array-subscripts board rmi)))
-
-(defun board-ij->rmi (board ij)
-  (linear-array-index board (s1 ij) (s2 ij)))
+(deftype board () '(array tile (11 11)))
 
 ;(declaim (inline board-tile set-board-tile))
 (defun board-tile (board ij)
-  (linear-aref board (s1 ij) (s2 ij)))
+  (aref board (s1 ij) (s2 ij)))
 (defun set-board-tile (board ij value)
-  (setf (linear-aref board (s1 ij) (s2 ij)) value))
+  (setf (aref board (s1 ij) (s2 ij)) value))
 (defsetf board-tile set-board-tile)
 
 ;; iter clause for iterating over board interior
@@ -72,7 +66,7 @@
       `(progn
          (with ,playervar = ,playerexpr)
          (with ,boardvar = ,boardexpr)
-         (with ,maxrmivar = (linear-array-size ,boardvar))
+         (with ,maxrmivar = (array-total-size ,boardvar))
          (with ,rmivar = 0)
          (declare (fixnum ,rmivar ,maxrmivar))
          (,keyword ,ijvar
@@ -80,11 +74,12 @@
                           (incf ,rmivar)
                           (when (>= ,rmivar ,maxrmivar)
                             (terminate))
-                          (board-rmi->ij ,boardvar
-                                         (if (eq ,playervar :black)
-                                             (- ,maxrmivar ,rmivar 1)
-                                             ,rmivar))))
-         (,keyword ,tilevar next (linear-vref ,boardvar ,rmivar))
+                          (list->v
+                           (array-index-row-major ,boardvar
+                                                  (if (eq ,playervar :black)
+                                                      (- ,maxrmivar ,rmivar 1)
+                                                      ,rmivar)))))
+         (,keyword ,tilevar next (board-tile ,boardvar ,ijvar))
          (when (eq (tile-object ,tilevar) :void)
            (next-iteration))))))
 
@@ -111,13 +106,14 @@
 
 
 (defun make-initial-board ()
-  (let ((board (make-linear-array (v->list *board-dimensions*)
-                                  :element-type 'tile
-                                  :initial-element (make-tile :void)
-                                  :adjustable nil)))
-    (iter (for rmi index-of-linear-array board)
-          (for ij = (list->v (linear-array-subscripts board rmi)))
-          (setf (board-tile board ij) (initial-tile ij)))
+  (let ((board (make-array (v->list *board-dimensions*)
+                           :element-type 'tile
+                           :initial-element (make-tile :void)
+                           :adjustable nil)))
+    (iter (for i from 1 below (- (s1 *board-dimensions*) 1))
+          (iter (for j from 1 below (- (s2 *board-dimensions*) 1))
+                (for ij = (v i j))
+                (setf (board-tile board ij) (initial-tile ij))))
     board))
 
 (defun make-empty-board ()
@@ -127,20 +123,21 @@
     board))
 
 (defun copy-board (board)
-  (let ((board2 (make-linear-array (linear-array-dimensions board)
-                                   :element-type 'tile
-                                   :adjustable nil)))
-    (iter (for rmi index-of-linear-array board)
-          (setf (linear-vref board2 rmi) (copy-tile (linear-vref board rmi))))
+  (let ((board2 (make-array (array-dimensions board)
+                            :element-type 'tile :adjustable nil)))
+    (iter (for i from 0 below (s1 *board-dimensions*))
+          (iter (for j from 0 below (s2 *board-dimensions*))
+                (for ij = (v i j))
+                (setf (board-tile board ij) (copy-tile (board-tile board ij)))))
     board2))
 
 (defun board-equal (board1 board2)
-  (iter (for tile1 in-linear-array board1)
-        (for tile2 in-linear-array board2)
+  (iter (for tile1 at ij1 of board1)
+        (for tile2 at ij2 of board2)
         (always (tile-equal tile1 tile2))))
 
 (defstruct (state (:constructor nil) (:copier nil))
-  (board nil :type (or null linear-array))
+  (board nil :type (or null board))
   (player :white :type player)
   (endp nil :type boolean)
   (hash 0 :type integer))
