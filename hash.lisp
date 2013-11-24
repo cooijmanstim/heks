@@ -2,15 +2,13 @@
 
 (declaim (optimize (debug 3)))
 
-(defparameter *zobrist-ceiling* (1+ most-positive-fixnum))
+(defparameter *zobrist-ceiling* most-positive-fixnum)
 (defun zobrist-bitstring ()
   (random *zobrist-ceiling*))
 
 (defparameter *zobrist-bitstring-positions*
   (let ((positions (make-linear-array (append (v->list *board-dimensions*) (list 2 2))
-                                      :element-type 'fixnum
-                                      :initial-element 0
-                                      :adjustable nil))
+                                      :element-type 'fixnum :initial-element 0))
         (board (make-initial-board))) ;; to make looping easier
     (iter (for tile at ij of board)
           (iter (for player in '(:white :black))
