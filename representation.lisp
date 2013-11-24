@@ -47,6 +47,9 @@
 (defparameter *board-dimensions* (v *board-size* *board-size*))
 (defparameter *board-center* (s+v -1/2 (s*v 1/2 *board-dimensions*)))
 
+(deftype board () `(array tile ,(v->list *board-dimensions*)))
+
+(declaim (inline board-tile set-board-tile))
 (defun board-tile (board ij)
   (aref board (s1 ij) (s2 ij)))
 (defun set-board-tile (board ij value)
@@ -65,6 +68,7 @@
          (with ,boardvar = ,boardexpr)
          (with ,maxrmivar = (array-total-size ,boardvar))
          (with ,rmivar = 0)
+         (declare (fixnum ,rmivar ,maxrmivar))
          (,keyword ,ijvar
                    next (progn
                           (incf ,rmivar)

@@ -119,6 +119,8 @@
                              (collect (list ij ij2)))))))))
 
 (defun piece-captures (board ij)
+  (declare (optimize (speed 3) (safety 0))
+           (type board board))
   (let* ((tile (board-tile board ij))
          (player (tile-owner tile))
          (can-fly (can-fly (tile-object tile))))
@@ -128,34 +130,33 @@
                      (iter inner-loop
                            (for d from 1)
                            (for ij2 = (v+v ij (s*v d didj)))
-                           (for tile = (board-tile board ij2))
-                           (for object = (tile-object tile))
-                           (for owner = (tile-owner tile))
                            (with capture-point = nil)
-                           (cond ((and (null capture-point)
-                                       (eq object :empty)
-                                       can-fly)
-                                  ;; haven't yet passed over an enemy piece. no capture, but keep going.
-                                  )
-                                 ((and (null capture-point)
-                                       (member object '(:man :king))
-                                       (eq owner (opponent player))
-                                       (not (member ij2 capture-points :test #'v=)))
-                                  ;; passing over a fresh enemy piece.
-                                  (setf capture-point ij2))
-                                 ((and capture-point
-                                       (eq object :empty))
-                                  ;; have passed over an enemy piece. possible stopping point or turning point.
-                                  (push (list ij ij2) captures)
-                                  (iter (for continuation in (recur ij2 (cons capture-point capture-points)))
-                                        (push (cons ij continuation) captures))
-                                  ;; if we can't fly over empties, then we must stop at the first empty after
-                                  ;; capture.
-                                  (unless can-fly
-                                    (return-from inner-loop)))
-                                 (t
-                                  ;; this is going nowhere
-                                  (return-from inner-loop))))
+                           (declare (fixnum d))
+                           (with-slots (object owner) (board-tile board ij2)
+                             (cond ((and (null capture-point)
+                                         (eq object :empty)
+                                         can-fly)
+                                    ;; haven't yet passed over an enemy piece. no capture, but keep going.
+                                    )
+                                   ((and (null capture-point)
+                                         (member object '(:man :king))
+                                         (eq owner (opponent player))
+                                         (not (member ij2 capture-points :test #'v=)))
+                                    ;; passing over a fresh enemy piece.
+                                    (setf capture-point ij2))
+                                   ((and capture-point
+                                         (eq object :empty))
+                                    ;; have passed over an enemy piece. possible stopping point or turning point.
+                                    (push (list ij ij2) captures)
+                                    (iter (for continuation in (recur ij2 (cons capture-point capture-points)))
+                                          (push (cons ij continuation) captures))
+                                    ;; if we can't fly over empties, then we must stop at the first empty after
+                                    ;; capture.
+                                    (unless can-fly
+                                      (return-from inner-loop)))
+                                   (t
+                                    ;; this is going nowhere
+                                    (return-from inner-loop)))))
                      (finally (return captures)))))
       (recur ij '()))))
 
@@ -163,7 +164,9 @@
 ;;; NOTE: potentially modifies state; sets endp if no moves. this is unconditionally set to nil by
 ;;; unapply-move.
 (defun moves (state)
+  (declare (optimize (speed 3) (safety 0)))
   (with-slots (board player endp) state
+    (declare (type board board))
     (iter (for tile at ij of board)
           (with-slots (owner) tile
             (when (eq owner player)

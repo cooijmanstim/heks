@@ -132,3 +132,10 @@
             (format t "optimized performance from ~D (±~D) to ~D (±~D)~%"
                     initial-mean initial-stdev final-mean final-stdev)
             final-weights))))))
+
+(defun learn-feature-weights-against-mcts ()
+  (let* ((k (second (array-dimensions *featuremap-map*)))
+         (initial-weights (make-sequence '(vector single-float) k :initial-element (/ 1.0 k)))
+;; TODO: 10000 is a loooong time
+         (mcts-player (lambda (state) (mcts-decision state 10000))))
+    (learn-feature-weights mcts-player initial-weights)))

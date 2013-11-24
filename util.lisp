@@ -117,3 +117,19 @@
      (sb-thread:thread-yield))
    :name "timer thread")
   (funcall fn))
+
+(defun profile (fn)
+  (sb-sprof:reset)
+  (sb-sprof:with-profiling (:loop nil)
+    (funcall fn))
+  (sb-sprof:report :type :flat))
+
+(defun profile-minimax ()
+  (profile (lambda ()
+             (time-limited 30 (lambda () (minimax-decision (make-initial-state)))))))
+
+(defun profile-mcts ()
+  (profile (lambda ()
+             (time-limited 30 (lambda () (mcts-decision (make-initial-state)))))))
+
+
