@@ -82,6 +82,10 @@
   (push move (aref *killers* depth)))
 
 (defun order-moves (depth state moves)
+  ;; TODO: need something like this to get some novelty in the search at all when not
+  ;; much is about to happen.  maybe do it more lightweight; move a few randomly chosen
+  ;; elements to the front.  alternatively, add a bit of noise to the evaluation.
+  (shuffle moves)
   (let ((prioritized-moves (lookup-killers depth moves)))
     (when-let ((transposition (lookup-transposition state)))
       (with-slots (move) transposition
@@ -99,6 +103,8 @@
     ;; use stored values
     (with-slots (lower-bound upper-bound move)
         transposition
+      ;; if the intersection between the present window and the previously
+      ;; proven interval is empty, don't investigate further.
       (cond ((<= beta lower-bound)
              (return-from minimax (values lower-bound move)))
             ((<= upper-bound alpha)
@@ -109,8 +115,6 @@
   (let ((moves (moves state)))
     (when (or (>= depth max-depth) (null moves))
       (return-from minimax (values (granularize (funcall evaluator state moves)) nil)))
-    ;; TODO: put moves in a vector for faster reordering?
-    (shuffle moves)
     (setf moves (order-moves depth state moves))
     (multiple-value-bind (value best-move)
         (iter (for move in moves)
@@ -131,6 +135,8 @@
         (when (>= subtree-height *transposition-minimum-depth*)
           (with-slots (depth lower-bound upper-bound move)
               (ensure-transposition state)
+            ;; if the found value is outside or on the border of the search window,
+            ;; it only proves a bound.
             (cond ((<= value original-alpha)
                    (setf upper-bound value))
                   ((<= beta value)
