@@ -91,6 +91,31 @@
         (nconc prioritized-moves (nset-difference moves prioritized-moves :test #'move-equal))
         moves)))
 
+(defstruct minimax-statistics
+  (mean-branching-factor 0.0 :type single-float)
+  (branching-factor-sample-size 0 :type integer)
+  (mean-move-count 0.0 :type single-float)
+  (move-count-sample-size 0 :type integer)
+  (node-count 0 :type integer))
+(defparameter *minimax-statistics* nil)
+
+;; XXX: mean and n are places that are evaluated more than once
+(defmacro update-running-average (mean n newvalue)
+  `(progn (setf ,mean (+ (* (/ ,n (1+ ,n)) ,mean)
+                         (* (/  1 (1+ ,n)) ,newvalue)))
+          (incf ,n)))
+
+(defun measure-branching-factor (branching-factor)
+  (with-slots ((mean mean-branching-factor) (n branching-factor-sample-size)) *minimax-statistics*
+    (update-running-average mean n branching-factor)))
+
+(defun measure-moves (moves)
+  (with-slots ((mean mean-move-count) (n move-count-sample-size)) *minimax-statistics*
+    (update-running-average mean n (length moves))))
+
+(defun measure-node ()
+  (incf (minimax-statistics-node-count *minimax-statistics*)))
+
 (defun minimax (state depth max-depth evaluator
                 &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
                 &aux (original-alpha alpha))
@@ -112,9 +137,12 @@
   (let ((moves (moves state)))
     (when (or (>= depth max-depth) (null moves))
       (return-from minimax (values (granularize (funcall evaluator state moves)) nil)))
+    (measure-node)
+    (measure-moves moves)
     (setf moves (order-moves depth state moves))
     (multiple-value-bind (value best-move)
         (iter (for move in moves)
+              (for branching-factor from 1)
               (for breadcrumb = (apply-move state move))
               (finding move maximizing (evaluation-inverse
                                         (minimax state (1+ depth) max-depth evaluator
@@ -126,7 +154,9 @@
               (when (>= alpha beta)
                 (store-killer depth move)
                 (finish))
-              (finally (return (values value best-move))))
+              (finally
+               (measure-branching-factor branching-factor)
+               (return (values value best-move))))
       ;; store transposition
       (let ((subtree-height (- max-depth depth)))
         (when (>= subtree-height *transposition-minimum-depth*)
@@ -146,19 +176,21 @@
       (values value best-move))))
 
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state))
-  (let (value best-move)
+  ;; use a fresh table with every top-level search
+  (let (value
+        best-move
+        (*transposition-table* (make-transposition-table))
+        (*killers* (make-killers))
+        (*minimax-statistics* (make-minimax-statistics))
+        (state (copy-state state)))
     (catch :out-of-time
-      ;; use a fresh table with every top-level search
-      (let ((*transposition-table* (make-transposition-table))
-            (*killers* (make-killers))
-            (state (copy-state state)))
-        (iter (for max-depth from 1 below *minimax-maximum-depth*)
-              (multiple-value-setq (value best-move) (minimax state 0 max-depth evaluator))
-              (print (list max-depth (ungranularize value) best-move))
-              (unless *out-of-time* ;; this *could* happen...
-                (funcall updater best-move)))))
+      (iter (for max-depth from 1 below *minimax-maximum-depth*)
+            (multiple-value-setq (value best-move) (minimax state 0 max-depth evaluator))
+            (print (list max-depth (ungranularize value) best-move))
+            (unless *out-of-time* ;; this *could* happen...
+              (funcall updater best-move))))
     (funcall committer)
-    best-move))
+    (values best-move *minimax-statistics*)))
 
 (defun evaluation-decision (state &key (evaluator #'evaluate-state))
   (iter (for move in (moves state))
