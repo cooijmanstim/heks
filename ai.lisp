@@ -35,6 +35,7 @@
               (incf all))))
     (/ ours all)))
 
+(defparameter *minimax-maximum-depth* 100)
 
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
 ;; but then collisions can happen, and stored information may be invalid.  if
@@ -50,10 +51,16 @@
 (defparameter *transposition-table* nil)
 ;; store only deep transpositions to save memory.  shallow transpositions are used much more
 ;; often, but there are many more of them.  TODO: handle out of memory properly
-(defparameter *transposition-minimum-depth* 3)
+(defparameter *transposition-minimum-depth* 2)
 
-(defun lookup-transposition (state)
-  (gethash state *transposition-table*))
+(defun make-transposition-table ()
+  (make-hash-table :test 'state-equal))
+
+(defun lookup-transposition (state &optional depth)
+  (when-let ((transposition (gethash state *transposition-table*)))
+    (if (and depth (<= depth (transposition-depth transposition)))
+        nil
+        transposition)))
 
 (defun ensure-transposition (state)
   (if-let ((transposition (gethash state *transposition-table*)))
@@ -61,73 +68,90 @@
     (setf (gethash (copy-state state) *transposition-table*)
           (make-transposition))))
 
-(defparameter *minimax-decision-time* 10)
+(defparameter *killers* nil)
 
-(defun order-moves (state moves)
-  (if-let ((transposition (lookup-transposition state)))
-    (with-slots (move) transposition
-      (cons move (delete move moves :test #'move-equal)))
-    moves))
+(defun make-killers ()
+  (make-array (list *minimax-maximum-depth*) :initial-element '()))
 
-(defun minimax (state depth evaluator
+(defun lookup-killers (depth valid-moves)
+  (let ((killers (aref *killers* depth)))
+    (intersection killers valid-moves)))
+
+(defun store-killer (depth move)
+  (deletef (aref *killers* depth) move)
+  (push move (aref *killers* depth)))
+
+(defun order-moves (depth state moves)
+  (let ((prioritized-moves (lookup-killers depth moves)))
+    (when-let ((transposition (lookup-transposition state)))
+      (with-slots (move) transposition
+        (push move prioritized-moves)))
+    (if prioritized-moves
+        (nconc prioritized-moves (nset-difference moves prioritized-moves :test #'move-equal))
+        moves)))
+
+(defun minimax (state depth max-depth evaluator
                 &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
                 &aux (original-alpha alpha))
   (when *out-of-time*
     (throw :out-of-time nil))
-  (when-let ((transposition (lookup-transposition state)))
+  (when-let ((transposition (lookup-transposition state depth)))
     ;; use stored values
-    (with-slots ((d depth) lower-bound upper-bound move)
+    (with-slots (lower-bound upper-bound move)
         transposition
-      (when (>= d depth)
-        (cond ((<= beta lower-bound)
-               (return-from minimax (values lower-bound move)))
-              ((<= upper-bound alpha)
-               (return-from minimax (values upper-bound move))))
-        (maxf alpha lower-bound)
-        (minf beta upper-bound))))
+      (cond ((<= beta lower-bound)
+             (return-from minimax (values lower-bound move)))
+            ((<= upper-bound alpha)
+             (return-from minimax (values upper-bound move))))
+      (maxf alpha lower-bound)
+      (minf beta upper-bound)))
   ;; investigate the subtree
   (let ((moves (moves state)))
-    (when (or (= depth 0) (null moves))
+    (when (or (>= depth max-depth) (null moves))
       (return-from minimax (values (granularize (funcall evaluator state moves)) nil)))
     ;; TODO: put moves in a vector for faster reordering?
     (shuffle moves)
-    (order-moves state moves)
+    (setf moves (order-moves depth state moves))
     (multiple-value-bind (value best-move)
         (iter (for move in moves)
               (for breadcrumb = (apply-move state move))
               (finding move maximizing (evaluation-inverse
-                                        (minimax state (1- depth) evaluator
+                                        (minimax state (1+ depth) max-depth evaluator
                                                  (evaluation-inverse beta)
                                                  (evaluation-inverse alpha)))
                        into (best-move value))
               (unapply-move state breadcrumb)
               (maxf alpha value)
               (when (>= alpha beta)
+                (store-killer depth move)
                 (finish))
               (finally (return (values value best-move))))
       ;; store transposition
-      (when (>= depth *transposition-minimum-depth*)
-        (with-slots ((d depth) lower-bound upper-bound move)
-            (ensure-transposition state)
-          (cond ((<= value original-alpha)
-                 (setf upper-bound value))
-                ((<= beta value)
-                 (setf lower-bound value))
-                ((< alpha value beta)
-                 (setf lower-bound value
-                       upper-bound value)))
-          (setf d depth move best-move)))
+      (let ((subtree-height (- max-depth depth)))
+        (when (>= subtree-height *transposition-minimum-depth*)
+          (with-slots (depth lower-bound upper-bound move)
+              (ensure-transposition state)
+            (cond ((<= value original-alpha)
+                   (setf upper-bound value))
+                  ((<= beta value)
+                   (setf lower-bound value))
+                  ((< alpha value beta)
+                   (setf lower-bound value
+                         upper-bound value)))
+            (setf depth subtree-height
+                  move best-move))))
       (values value best-move))))
 
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state))
   (let (value best-move)
     (catch :out-of-time
       ;; use a fresh table with every top-level search
-      (let ((*transposition-table* (make-hash-table :test 'state-equal))
+      (let ((*transposition-table* (make-transposition-table))
+            (*killers* (make-killers))
             (state (copy-state state)))
-        (iter (for depth from 0)
-              (multiple-value-setq (value best-move) (minimax state depth evaluator))
-              (print (list depth (ungranularize value) best-move))
+        (iter (for max-depth from 1 below *minimax-maximum-depth*)
+              (multiple-value-setq (value best-move) (minimax state 0 max-depth evaluator))
+              (print (list max-depth (ungranularize value) best-move))
               (unless *out-of-time* ;; this *could* happen...
                 (funcall updater best-move)))))
     (funcall committer)
