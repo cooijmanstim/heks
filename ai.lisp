@@ -22,7 +22,8 @@
 (defun evaluate-state (state moves)
   (if (null moves)
       0 ;; no moves, player loses
-      (material-advantage state)))
+      (+ (* 0.1 (gaussian-random))
+         (material-advantage state))))
 
 ;; ratio of pieces that is owned by the current player
 (defun material-advantage (state)
@@ -78,14 +79,10 @@
     (intersection killers valid-moves)))
 
 (defun store-killer (depth move)
-  (deletef (aref *killers* depth) move)
+  (deletef (aref *killers* depth) move :test #'move-equal)
   (push move (aref *killers* depth)))
 
 (defun order-moves (depth state moves)
-  ;; TODO: need something like this to get some novelty in the search at all when not
-  ;; much is about to happen.  maybe do it more lightweight; move a few randomly chosen
-  ;; elements to the front.  alternatively, add a bit of noise to the evaluation.
-  (shuffle moves)
   (let ((prioritized-moves (lookup-killers depth moves)))
     (when-let ((transposition (lookup-transposition state)))
       (with-slots (move) transposition
