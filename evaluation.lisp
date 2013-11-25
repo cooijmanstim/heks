@@ -2,8 +2,8 @@
 
 (declaim (optimize (debug 3) (safety 3)))
 
-(defparameter *evaluation-minimum* most-negative-fixnum)
-(defparameter *evaluation-maximum* most-positive-fixnum)
+(defparameter *evaluation-maximum* (min (abs most-negative-fixnum) (abs most-positive-fixnum)))
+(defparameter *evaluation-minimum* (- *evaluation-maximum*))
 
 (defun evaluation-inverse (v)
   (- v))
@@ -17,15 +17,16 @@
 (defun piece-differential (state)
   (let ((ours 0) (theirs 0))
     (declare (fixnum ours theirs))
-    (iter (for tile at ij of (state-board state))
-          (with-slots (object owner) tile
-            (if (eq owner (state-player state))
-                (incf ours (piece-value object))
-                (incf theirs (piece-value object)))))
-    (- ours theirs)))
+    (with-slots ((us player)) state
+      (iter (for tile at ij of (state-board state))
+            (with-slots (object owner) tile
+              (if (eq owner us)
+                  (incf ours (piece-value object))
+                  (incf theirs (piece-value object)))))
+      (- ours theirs))))
 
 (defun evaluate-state (state moves)
   (if (null moves)
-      0 ;; no moves, player loses
-      (+ (round (* 2 (gaussian-random)))
+      *evaluation-minimum* ;; no moves, player loses
+      (+ (round (gaussian-random))
          (piece-differential state))))

@@ -25,7 +25,7 @@
 
 (defun lookup-transposition (state &optional depth)
   (when-let ((transposition (gethash state *transposition-table*)))
-    (if (and depth (<= depth (transposition-depth transposition)))
+    (if (and depth (>= depth (transposition-depth transposition)))
         nil
         transposition)))
 
@@ -40,16 +40,18 @@
 (defun make-killers ()
   (make-array (list *minimax-maximum-depth*) :initial-element '()))
 
-(defun lookup-killers (depth valid-moves)
-  (let ((killers (aref *killers* depth)))
+(defun lookup-killers (ply valid-moves)
+  (let ((killers (aref *killers* ply)))
     (intersection killers valid-moves)))
 
-(defun store-killer (depth move)
-  (deletef (aref *killers* depth) move :test #'move-equal)
-  (push move (aref *killers* depth)))
+(defun store-killer (ply move)
+  (deletef (aref *killers* ply) move :test #'move-equal)
+  (push move (aref *killers* ply)))
 
-(defun order-moves (depth state moves)
-  (let ((prioritized-moves (lookup-killers depth moves)))
+(defun order-moves (depth ply state moves)
+  (declare (ignore depth))
+  (let ((prioritized-moves (lookup-killers ply moves)))
+    ;; use transposition move regardless of depth
     (when-let ((transposition (lookup-transposition state)))
       (with-slots (move) transposition
         (push move prioritized-moves)))
@@ -82,7 +84,9 @@
 (defun measure-node ()
   (incf (minimax-statistics-node-count *minimax-statistics*)))
 
-(defun minimax (state depth max-depth evaluator
+;; depth counts down as we recurse, ply counts up. transposition lookup depends on depth
+;; (of the subtree it summarizes) whereas killer move lookup depends on ply.
+(defun minimax (state depth ply evaluator
                 &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
                 &aux (original-alpha alpha))
   (when *out-of-time*
@@ -92,25 +96,24 @@
     (with-slots (value type move)
         transposition
       (ccase type
-        (:exact (return-from minimax (values value move)))
+        (:exact (return-from minimax (values value (list move))))
         (:lower (maxf alpha value))
         (:upper (minf beta value)))
       (when (>= alpha beta)
         (return-from minimax (values value (list move))))))
   ;; investigate the subtree
   (let ((moves (moves state)))
-    (when (or (>= depth max-depth) (null moves))
-      (return-from minimax (values (funcall evaluator state moves)
-                                   '())))
+    (when (or (<= depth 0) (null moves))
+      (return-from minimax (values (funcall evaluator state moves) '())))
     (measure-node)
     (measure-moves moves)
-    (setf moves (order-moves depth state moves))
+    (setf moves (order-moves depth ply state moves))
     (multiple-value-bind (value variation)
         (iter (for move in moves)
               (for branching-factor from 1)
               (for breadcrumb = (apply-move state move))
               (multiple-value-bind (subvalue subvariation)
-                  (minimax state (1+ depth) max-depth evaluator
+                  (minimax state (1- depth) (1+ ply) evaluator
                            (evaluation-inverse beta)
                            (evaluation-inverse alpha))
                 (finding (cons move subvariation)
@@ -119,30 +122,29 @@
               (unapply-move state breadcrumb)
               (maxf alpha value)
               (when (>= alpha beta)
-                (store-killer depth move)
+                (store-killer ply move)
                 (finish))
               (finally
                (measure-branching-factor branching-factor)
                (return (values value variation))))
       ;; store transposition
-      (let ((subtree-height (- max-depth depth)))
-        (when (>= subtree-height *transposition-minimum-depth*)
-          (with-slots ((stored-depth depth)
-                       (stored-value value)
-                       (stored-type type)
-                       (stored-move move))
-              (ensure-transposition state)
-            ;; if the found value is outside or on the border of the search window,
-            ;; it only proves a bound
-            (cond ((<= value original-alpha)
-                   (setf stored-type :upper))
-                  ((<= beta value)
-                   (setf stored-type :lower))
-                  (t
-                   (setf stored-type :exact)))
-            (setf stored-value value
-                  stored-depth subtree-height
-                  stored-move (first variation)))))
+      (when (>= depth *transposition-minimum-depth*)
+        (with-slots ((stored-depth depth)
+                     (stored-value value)
+                     (stored-type type)
+                     (stored-move move))
+            (ensure-transposition state)
+          ;; if the found value is outside or on the border of the search window,
+          ;; it only proves a bound
+          (cond ((<= value original-alpha)
+                 (setf stored-type :upper))
+                ((<= beta value)
+                 (setf stored-type :lower))
+                (t
+                 (setf stored-type :exact)))
+          (setf stored-value value
+                stored-depth depth
+                stored-move (first variation))))
       (values value variation))))
 
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state))
@@ -154,8 +156,8 @@
         (*minimax-statistics* (make-minimax-statistics))
         (state (copy-state state)))
     (catch :out-of-time
-      (iter (for max-depth from 1 below *minimax-maximum-depth*)
-            (multiple-value-setq (value variation) (minimax state 0 max-depth evaluator))
+      (iter (for max-depth from 0 below *minimax-maximum-depth*)
+            (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
             (print (list max-depth value variation))
             (unless *out-of-time* ;; this *could* happen...
               (funcall updater (first variation)))))
