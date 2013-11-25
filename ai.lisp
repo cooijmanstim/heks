@@ -2,48 +2,6 @@
 
 (declaim (optimize (safety 3) (debug 3)))
 
-;; evaluations v are in [0,1] interpreted as probability of winning.  these are
-;; transformed into integers by discretizing the domain into *evaluation-granularity*
-;; buckets.  coarser domains allow more pruning.
-(defparameter *evaluation-granularity* 100)
-(defparameter *evaluation-minimum* 0)
-(defparameter *evaluation-maximum* *evaluation-granularity*)
-
-;; FIXME: the winning probability should usually be approximately 0.5, at least
-;; initially, and advantages seen a handful of plies deep are unlikely to deviate
-;; from this much.  these differences get lost in the granularity.  when the probability
-;; is close to zero or one, it is too late too make a big difference any more, so
-;; we don't care so much about accuracy there.
-;; so squash it through a sigmoid or some other transformation that exaggerates
-;; small deviations.
-
-(defun granularize (v)
-  (round (* *evaluation-granularity* v)))
-(defun ungranularize (v)
-  (/ v 1.0 *evaluation-granularity*))
-(defun evaluation-inverse (v)
-  (assert (= *evaluation-minimum* 0))
-  (- *evaluation-maximum* v))
-
-;; evaluations are from the point of view of whoever's turn it is
-
-(defun evaluate-state (state moves)
-  (if (null moves)
-      0 ;; no moves, player loses
-      (+ (* 0.1 (gaussian-random))
-         (material-advantage state))))
-
-;; ratio of pieces that is owned by the current player
-(defun material-advantage (state)
-  (let ((ours 0) (all 0))
-    (iter (for tile at ij of (state-board state))
-          (with-slots (object owner) tile
-            (when (member object '(:man :king))
-              (when (eq owner (state-player state))
-                (incf ours))
-              (incf all))))
-    (/ ours all)))
-
 (defparameter *minimax-maximum-depth* 100)
 
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
@@ -94,8 +52,7 @@
   (let ((prioritized-moves (lookup-killers depth moves)))
     (when-let ((transposition (lookup-transposition state)))
       (with-slots (move) transposition
-        ;; TODO: temporarily storing entire variation in TT
-        (push (first move) prioritized-moves)))
+        (push move prioritized-moves)))
     (if prioritized-moves
         (nconc prioritized-moves (nset-difference moves prioritized-moves :test #'move-equal))
         moves)))
@@ -139,11 +96,11 @@
         (:lower (maxf alpha value))
         (:upper (minf beta value)))
       (when (>= alpha beta)
-        (return-from minimax (values value move)))))
+        (return-from minimax (values value (list move))))))
   ;; investigate the subtree
   (let ((moves (moves state)))
     (when (or (>= depth max-depth) (null moves))
-      (return-from minimax (values (granularize (funcall evaluator state moves))
+      (return-from minimax (values (funcall evaluator state moves)
                                    '())))
     (measure-node)
     (measure-moves moves)
@@ -185,7 +142,7 @@
                    (setf stored-type :exact)))
             (setf stored-value value
                   stored-depth subtree-height
-                  stored-move variation)))) ;; TODO: temporarily storing entire variation in TT
+                  stored-move (first variation)))))
       (values value variation))))
 
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state))
@@ -199,11 +156,11 @@
     (catch :out-of-time
       (iter (for max-depth from 1 below *minimax-maximum-depth*)
             (multiple-value-setq (value variation) (minimax state 0 max-depth evaluator))
-            (print (list max-depth (ungranularize value) variation))
+            (print (list max-depth value variation))
             (unless *out-of-time* ;; this *could* happen...
               (funcall updater (first variation)))))
     (funcall committer)
-    (values (first variation) (rest variation) *minimax-statistics*)))
+    (values (first variation) variation *minimax-statistics*)))
 
 (defun evaluation-decision (state &key (evaluator #'evaluate-state))
   (iter (for move in (moves state))

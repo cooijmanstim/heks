@@ -21,6 +21,7 @@
    (:file "representation")
    (:file "hash")
    (:file "game")
+   (:file "evaluation")
    (:file "ai")
    (:file "learning")
    (:file "gui")
