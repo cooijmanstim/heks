@@ -243,6 +243,20 @@
                 (unapply-move state breadcrumb)
                 (assert-equal (zobrist-hash state) (state-hash state))))))
 
+(define-test state-equal
+  (iter (repeat 10)
+        (let* ((initial-state (make-initial-state))
+               (state (copy-state initial-state))
+               (breadcrumbs '()))
+          (assert-equality #'state-equal state initial-state)
+          (iter (repeat 10)
+                (for moves = (moves state))
+                (push (apply-move state (random-elt moves)) breadcrumbs)
+                (assert-false (state-equal state initial-state)))
+          (iter (for breadcrumb in breadcrumbs)
+                (unapply-move state breadcrumb))
+          (assert-equality #'state-equal state initial-state))))
+
 ;; commented out because verbose
 '(define-test spsa
   (labels ((f (x)

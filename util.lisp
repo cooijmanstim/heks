@@ -118,7 +118,8 @@
      (setq *out-of-time* t)
      (sb-thread:thread-yield))
    :name "timer thread")
-  (funcall fn))
+  (funcall fn)
+  (setq *out-of-time* nil))
 
 (defun profile (fn)
   (sb-sprof:reset)

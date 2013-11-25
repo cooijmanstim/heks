@@ -5,9 +5,17 @@
 ;; evaluations v are in [0,1] interpreted as probability of winning.  these are
 ;; transformed into integers by discretizing the domain into *evaluation-granularity*
 ;; buckets.  coarser domains allow more pruning.
-(defparameter *evaluation-granularity* 40)
+(defparameter *evaluation-granularity* 100)
 (defparameter *evaluation-minimum* 0)
 (defparameter *evaluation-maximum* *evaluation-granularity*)
+
+;; FIXME: the winning probability should usually be approximately 0.5, at least
+;; initially, and advantages seen a handful of plies deep are unlikely to deviate
+;; from this much.  these differences get lost in the granularity.  when the probability
+;; is close to zero or one, it is too late too make a big difference any more, so
+;; we don't care so much about accuracy there.
+;; so squash it through a sigmoid or some other transformation that exaggerates
+;; small deviations.
 
 (defun granularize (v)
   (round (* *evaluation-granularity* v)))
@@ -44,9 +52,9 @@
 ;; if the stored move is valid, we can still use it for move ordering.
 ;; TODO: measure collision rate
 (defstruct transposition
-  (depth 0 :type integer)
-  (lower-bound 0 :type integer)
-  (upper-bound 0 :type integer)
+  (depth 0 :type fixnum)
+  (value 0 :type fixnum)
+  (type nil :type (or null (member :exact :lower :upper)))
   (move nil :type list))
 (sb-ext:define-hash-table-test state-equal state-hash)
 (defparameter *transposition-table* nil)
@@ -86,7 +94,8 @@
   (let ((prioritized-moves (lookup-killers depth moves)))
     (when-let ((transposition (lookup-transposition state)))
       (with-slots (move) transposition
-        (push move prioritized-moves)))
+        ;; TODO: temporarily storing entire variation in TT
+        (push (first move) prioritized-moves)))
     (if prioritized-moves
         (nconc prioritized-moves (nset-difference moves prioritized-moves :test #'move-equal))
         moves)))
@@ -123,32 +132,33 @@
     (throw :out-of-time nil))
   (when-let ((transposition (lookup-transposition state depth)))
     ;; use stored values
-    (with-slots (lower-bound upper-bound move)
+    (with-slots (value type move)
         transposition
-      ;; if the intersection between the present window and the previously
-      ;; proven interval is empty, don't investigate further.
-      (cond ((<= beta lower-bound)
-             (return-from minimax (values lower-bound move)))
-            ((<= upper-bound alpha)
-             (return-from minimax (values upper-bound move))))
-      (maxf alpha lower-bound)
-      (minf beta upper-bound)))
+      (ccase type
+        (:exact (return-from minimax (values value move)))
+        (:lower (maxf alpha value))
+        (:upper (minf beta value)))
+      (when (>= alpha beta)
+        (return-from minimax (values value move)))))
   ;; investigate the subtree
   (let ((moves (moves state)))
     (when (or (>= depth max-depth) (null moves))
-      (return-from minimax (values (granularize (funcall evaluator state moves)) nil)))
+      (return-from minimax (values (granularize (funcall evaluator state moves))
+                                   '())))
     (measure-node)
     (measure-moves moves)
     (setf moves (order-moves depth state moves))
-    (multiple-value-bind (value best-move)
+    (multiple-value-bind (value variation)
         (iter (for move in moves)
               (for branching-factor from 1)
               (for breadcrumb = (apply-move state move))
-              (finding move maximizing (evaluation-inverse
-                                        (minimax state (1+ depth) max-depth evaluator
-                                                 (evaluation-inverse beta)
-                                                 (evaluation-inverse alpha)))
-                       into (best-move value))
+              (multiple-value-bind (subvalue subvariation)
+                  (minimax state (1+ depth) max-depth evaluator
+                           (evaluation-inverse beta)
+                           (evaluation-inverse alpha))
+                (finding (cons move subvariation)
+                         maximizing (evaluation-inverse subvalue)
+                         into (variation value)))
               (unapply-move state breadcrumb)
               (maxf alpha value)
               (when (>= alpha beta)
@@ -156,41 +166,44 @@
                 (finish))
               (finally
                (measure-branching-factor branching-factor)
-               (return (values value best-move))))
+               (return (values value variation))))
       ;; store transposition
       (let ((subtree-height (- max-depth depth)))
         (when (>= subtree-height *transposition-minimum-depth*)
-          (with-slots (depth lower-bound upper-bound move)
+          (with-slots ((stored-depth depth)
+                       (stored-value value)
+                       (stored-type type)
+                       (stored-move move))
               (ensure-transposition state)
             ;; if the found value is outside or on the border of the search window,
-            ;; it only proves a bound.
+            ;; it only proves a bound
             (cond ((<= value original-alpha)
-                   (setf upper-bound value))
+                   (setf stored-type :upper))
                   ((<= beta value)
-                   (setf lower-bound value))
-                  ((< alpha value beta)
-                   (setf lower-bound value
-                         upper-bound value)))
-            (setf depth subtree-height
-                  move best-move))))
-      (values value best-move))))
+                   (setf stored-type :lower))
+                  (t
+                   (setf stored-type :exact)))
+            (setf stored-value value
+                  stored-depth subtree-height
+                  stored-move variation)))) ;; TODO: temporarily storing entire variation in TT
+      (values value variation))))
 
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state))
   ;; use a fresh table with every top-level search
   (let (value
-        best-move
+        variation
         (*transposition-table* (make-transposition-table))
         (*killers* (make-killers))
         (*minimax-statistics* (make-minimax-statistics))
         (state (copy-state state)))
     (catch :out-of-time
       (iter (for max-depth from 1 below *minimax-maximum-depth*)
-            (multiple-value-setq (value best-move) (minimax state 0 max-depth evaluator))
-            (print (list max-depth (ungranularize value) best-move))
+            (multiple-value-setq (value variation) (minimax state 0 max-depth evaluator))
+            (print (list max-depth (ungranularize value) variation))
             (unless *out-of-time* ;; this *could* happen...
-              (funcall updater best-move))))
+              (funcall updater (first variation)))))
     (funcall committer)
-    (values best-move *minimax-statistics*)))
+    (values (first variation) (rest variation) *minimax-statistics*)))
 
 (defun evaluation-decision (state &key (evaluator #'evaluate-state))
   (iter (for move in (moves state))
