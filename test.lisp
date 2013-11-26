@@ -12,26 +12,6 @@
             (setf (board-tile board (v i j)) (make-tile object owner))))
     board))
 
-;; allows us to be lazy and specify points as lists and therefore movesets as
-;; simple quoted lists.
-(defun designated-move (move-designator)
-  (mapcar #'designated-v move-designator))
-
-(defun designated-v (v-designator)
-  (if (consp v-designator)
-      (if (consp (cdr v-designator))
-          (apply #'v v-designator)
-          v-designator)
-      ;; assume sequence
-      (v (elt v-designator 0)
-         (elt v-designator 1))))
-
-(defmacro assert-moveset (expected form &optional extras)
-  `(assert-equality #'moveset-equal
-                    (mapcar #'designated-move ,expected)
-                    ,form
-                    ,@extras))
-
 (define-test v
   (assert-true (v= (v 1 1) (v 1 1)))
   (assert-equality #'v= (v 0 0) (vmap (constantly 0) (v 1 2)))
@@ -94,7 +74,7 @@
   (iter (repeat 5)
         (for ij = (vmap #'random *board-dimensions*))
         (assert-equality #'v= ij (board-position (window-position ij))))
-  (assert-equality #'v= *window-center* (window-position *board-center*)))
+  (assert-equalp *window-center* (window-position *board-center*)))
 
 (define-test tile-equal
   (iter (repeat 5)
@@ -107,31 +87,26 @@
 (define-test copy-board
   (assert-equality #'board-equal (make-initial-board) (copy-board (make-initial-board))))
 
-(define-test displacement-direction
-  (iter (repeat 2)
-        (for ij = (v (random 10) (random 10)))
-        (iter (for direction in *all-directions*)
-              (iter (for distance from 1 to 3)
-                    (multiple-value-bind (direction2 distance2)
-                        (displacement-direction ij (v+v ij (s*v distance direction)))
-                      (assert-equal direction direction2)
-                      (assert-equal distance distance2))))))
-
 (define-test submove
-  (assert-true (submovep '((1 . 1)) '((1 . 1) (1 . 2))))
-  (assert-false (submovep '((1 . 1)) '((1 . 2) (1 . 3)))))
+  (assert-true (submovep (list (v 1 1))
+                         (list (v 1 1) (v 1 2))))
+  (assert-false (submovep (list (v 1 1))
+                          (list (v 1 2) (v 1 3)))))
 
 (define-test supermoves
-  (let ((moves '(((1 . 1) (2 . 2))
-                 ((1 . 1) (2 . 1))
-                 ((1 . 2) (2 . 3)))))
-    (assert-moveset '(((1 1) (2 2))
-                      ((1 1) (2 1)))
-                    (supermoves '((1 . 1)) moves))
-    (assert-moveset '()
-                    (supermoves '((3 . 3)) moves))
-    (assert-moveset '(((1 2) (2 3)))
-                    (supermoves '((1 . 2)) moves))))
+  (let ((moves (list (list (v 1 1) (v 2 2))
+                     (list (v 1 1) (v 2 1))
+                     (list (v 1 2) (v 2 3)))))
+    (assert-equality #'moveset-equal
+                     (list (list (v 1 1) (v 2 2))
+                           (list (v 1 1) (v 2 1)))
+                     (supermoves (list (v 1 1)) moves))
+    (assert-equality #'moveset-equal
+                     '()
+                     (supermoves (list (v 3 3)) moves))
+    (assert-equality #'moveset-equal
+                     (list (list (v 1 2) (v 2 3)))
+                     (supermoves (list (v 1 2)) moves))))
 
 (define-test iter-board
   (let* ((board (make-empty-board))
@@ -139,10 +114,10 @@
                     (collect ij)))
          (ijs-black (iter (for tile at ij of board from :black)
                           (collect ij))))
-    (assert-equal 61 (length ijs))
-    (assert-equal (v 1 1) (first ijs))
-    (assert-equal (s+v -2 *board-dimensions*) (lastcar ijs))
-    (assert-equal ijs (reverse ijs-black))))
+    (assert-equalp 61 (length ijs))
+    (assert-equalp (v 1 1) (first ijs))
+    (assert-equalp (s+v -2 *board-dimensions*) (lastcar ijs))
+    (assert-equalp ijs (reverse ijs-black))))
 
 (define-test piece-moves
   (let ((board (make-test-board-with '((1 1 :man :white)
@@ -150,19 +125,24 @@
                                        (2 1 :man :black)
                                        (2 3 :man :black)
                                        (3 4 :man :white)))))
-    (assert-moveset '(((1 1) (2 2)))
-                    (piece-moves board (v 1 1)))
-    (assert-moveset '(((3 4) (3 5))
-                      ((3 4) (4 4))
-                      ((3 4) (4 5)))
-                    (piece-moves board (v 3 4)))
-    (assert-moveset '()
-                    (piece-moves board (v 1 2)))
-    (assert-moveset '()
-                    (piece-moves board (v 2 1)))
-    (assert-moveset '(((2 3) (1 3))
-                      ((2 3) (2 2)))
-                    (piece-moves board (v 2 3)))))
+    (assert-equality #'moveset-equal
+                     (list (list (v 1 1) (v 2 2)))
+                     (piece-moves board (v 1 1)))
+    (assert-equality #'moveset-equal
+                     (list (list (v 3 4) (v 3 5))
+                           (list (v 3 4) (v 4 4))
+                           (list (v 3 4) (v 4 5)))
+                     (piece-moves board (v 3 4)))
+    (assert-equality #'moveset-equal
+                     '()
+                     (piece-moves board (v 1 2)))
+    (assert-equality #'moveset-equal
+                     '()
+                     (piece-moves board (v 2 1)))
+    (assert-equality #'moveset-equal
+                     (list (list (v 2 3) (v 1 3))
+                           (list (v 2 3) (v 2 2)))
+                     (piece-moves board (v 2 3)))))
 
 (define-test piece-captures
   (let ((board (make-test-board-with '((1 1 :man :white)
@@ -170,18 +150,23 @@
                                        (2 1 :man :black)
                                        (2 3 :man :black)
                                        (3 4 :man :white)))))
-    (assert-moveset '(((1 1) (3 1))
-                      ((1 1) (1 3))
-                      ((1 1) (1 3) (3 3)))
-                    (piece-captures board (v 1 1)))
-    (assert-moveset '()
-                    (piece-captures board (v 3 4)))
-    (assert-moveset '()
-                    (piece-captures board (v 1 2)))
-    (assert-moveset '()
-                    (piece-captures board (v 2 1)))
-    (assert-moveset '(((2 3) (4 5)))
-                    (piece-captures board (v 2 3)))))
+    (assert-equality #'moveset-equal
+                     (list (list (v 1 1) (v 3 1))
+                           (list (v 1 1) (v 1 3))
+                           (list (v 1 1) (v 1 3) (v 3 3)))
+                     (piece-captures board (v 1 1)))
+    (assert-equality #'moveset-equal
+                     '()
+                     (piece-captures board (v 3 4)))
+    (assert-equality #'moveset-equal
+                     '()
+                     (piece-captures board (v 1 2)))
+    (assert-equality #'moveset-equal
+                     '()
+                     (piece-captures board (v 2 1)))
+    (assert-equality #'moveset-equal
+                     (list (list (v 2 3) (v 4 5)))
+                     (piece-captures board (v 2 3)))))
 
 (define-test moves
   (let ((board (make-test-board-with '((1 1 :man :white)
@@ -189,10 +174,12 @@
                                        (2 1 :man :black)
                                        (2 3 :man :black)
                                        (3 4 :man :white)))))
-    (assert-moveset '(((1 1) (1 3) (3 3)))
-                    (moves (make-state board :white)))
-    (assert-moveset '(((2 3) (4 5)))
-                    (moves (make-state board :black)))))
+    (assert-equality #'moveset-equal
+                     (list (list (v 1 1) (v 1 3) (v 3 3)))
+                     (moves (make-state board :white)))
+    (assert-equality #'moveset-equal
+                     (list (list (v 2 3) (v 4 5)))
+                     (moves (make-state board :black)))))
 
 (define-test remove-piece
   (let* ((state (make-state (make-test-board-with '((1 1 :man :white))))))
@@ -200,14 +187,22 @@
     (assert-equal :empty (tile-object (board-tile (state-board state) (v 1 1))))))
 
 (define-test displacement-direction
+  (iter (repeat 2)
+        (for ij = (v (random 10) (random 10)))
+        (iter (for direction in *all-directions*)
+              (iter (for distance from 1 to 3)
+                    (multiple-value-bind (direction2 distance2)
+                        (displacement-direction ij (v+v ij (s*v distance direction)))
+                      (assert-equalp direction direction2)
+                      (assert-equalp distance distance2)))))
   (multiple-value-bind (didj n)
       (displacement-direction (v 1 1) (v 1 2))
-    (assert-equal (v 0 1) didj)
-    (assert-equal 1 n))
+    (assert-equalp (v 0 1) didj)
+    (assert-equalp 1 n))
   (multiple-value-bind (didj n)
       (displacement-direction (v 1 1) (v 2 2))
-    (assert-equal (v 1 1) didj)
-    (assert-equal 1 n)))
+    (assert-equalp (v 1 1) didj)
+    (assert-equalp 1 n)))
 
 (define-test apply-move
   (let* ((test-board-designator '((1 1 :man :white)
@@ -217,14 +212,14 @@
                                   (3 4 :man :white)))
          (state (make-state (make-test-board-with test-board-designator) :white))
          (breadcrumbs '()))
-    (push (apply-move state (designated-move '((1 1) (1 3) (3 3)))) breadcrumbs)
+    (push (apply-move state (list (v 1 1) (v 1 3) (v 3 3))) breadcrumbs)
     (assert-equal :empty (tile-object (board-tile (state-board state) (v 1 2))))
     (assert-equal :empty (tile-object (board-tile (state-board state) (v 2 3))))
     (unapply-move state (pop breadcrumbs))
     (assert-equal :man (tile-object (board-tile (state-board state) (v 1 2))))
     (assert-equal :man (tile-object (board-tile (state-board state) (v 2 3))))
     (toggle-player state)
-    (push (apply-move state (designated-move '((2 3) (4 5)))) breadcrumbs)
+    (push (apply-move state (list (v 2 3) (v 4 5))) breadcrumbs)
     (assert-equal :empty (tile-object (board-tile (state-board state) (v 3 4))))
     (unapply-move state (pop breadcrumbs))
     (assert-equal :man (tile-object (board-tile (state-board state) (v 3 4))))))

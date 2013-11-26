@@ -27,48 +27,38 @@
 (defparameter *scale* 24)
 (defparameter *hexagon*
   (iter (for i from 0 to 6)
-        (collect (s*v *scale* (angle->v (fraction->angle (/ i 6)))))))
+        (collect (scale-vector *scale* (angle->vector (fraction->angle (/ i 6)))))))
 
 (defparameter *hexagonal-basis*
-  (mapcar (lambda (fraction)
-            (s*v (* 2 *scale*)
-                 (angle->v (fraction->angle fraction))))
-          ;; negative angles because screen y is upside-down
-          '(-5/12 -1/12)))
-
-(defparameter *hexagonal-basis-inverse*
-  (let* ((a (s1 (first  *hexagonal-basis*)))
-         (b (s1 (second *hexagonal-basis*)))
-         (c (s2 (first  *hexagonal-basis*)))
-         (d (s2 (second *hexagonal-basis*)))
-         (det (- (* a d) (* b c))))
-    (iter (for v in (list (v d (- c))
-                          (v (- b) a)))
-          (collect (s*v (/ 1 det) v)))))
+  (matrix (transpose-lists
+           (mapcar (lambda (fraction)
+                     (scale-vector (* 2 *scale*)
+                                   (angle->vector (fraction->angle fraction))
+                                   'list))
+                   ;; negative angles because screen y is upside-down
+                   '(-5/12 -1/12)))))
 
 (defparameter *piece-radius* (* 0.7 *scale*))
 (defparameter *move-radius* (round (* 0.2 *scale*)))
 
 (defun window-position (ij)
-  (let ((ij (v-v ij *board-center*)))
-    (v+v (v+v (s*v (s1 ij) (first  *hexagonal-basis*))
-              (s*v (s2 ij) (second *hexagonal-basis*)))
-         *window-center*)))
+  (let ((ij (vector-minus ij *board-center*)))
+    (vector-plus (matrix-dot-vector *hexagonal-basis* ij)
+                 *window-center*)))
 
 (defun board-position (xy)
-  (let ((xy (v-v xy *window-center*)))
-    (vmap #'round
-          (v+v (v+v (s*v (s1 xy) (first  *hexagonal-basis-inverse*))
-                    (s*v (s2 xy) (second *hexagonal-basis-inverse*)))
-               *board-center*))))
+  (let ((xy (vector-minus xy *window-center*)))
+    (map 'v #'round
+         (vector-plus (matrix-dot-vector (matrix-inverse *hexagonal-basis*) xy)
+                      *board-center*))))
 
 (defun draw-board (board)
   (iter (for tile at ij of board)
         (draw-tile tile (window-position ij))))
 
 (defun draw-character (character xs)
-  (let ((xs (v-v xs (s*v 1/2 *font-dimensions*))))
-    (sdl:draw-string-solid (string character) (v->sdlpoint xs)
+  (let ((xs (vector-minus xs (scale-vector 1/2 *font-dimensions*))))
+    (sdl:draw-string-solid (string character) (vector->sdlpoint xs)
                            :color *board-color* :font *font*)))
 
 (defun draw-board-axes ()
@@ -76,23 +66,24 @@
         (for number in-vector "123456789")
         (for letter in-vector "abcdefghi")
         (for j in '(0 0 0 0 0 1 2 3 4))
-        (draw-character number (window-position (v (+ j 1/4) i)))
-        (draw-character letter (window-position (v i (+ j 1/4))))))
+        (draw-character number (window-position (vector (+ j 1/4) i)))
+        (draw-character letter (window-position (vector i (+ j 1/4))))))
 
 (defun draw-tile (tile dx)
-  (unless (eq (tile-object tile) :void)
-    (let ((hexagon (iter (for x in *hexagon*)
-                         (collect (v->sdlpoint (v+v x dx)))))
-          (center (v->sdlpoint dx))
-          (piece-color (cdr (assoc (tile-owner tile) *piece-colors*))))
-      (sdl:draw-polygon hexagon :color *board-color* :aa t)
-      (sdl:flood-fill (v->sdlpoint dx) :surface *surface* :color *board-color*)
-      ;; draw-filled-polygon refuses to work...
-      '(sdl:draw-filled-polygon hexagon :color *board-color*)
-      (case (tile-object tile)
-        (:man  (sdl:draw-filled-circle center (round *piece-radius*) :color piece-color))
-        (:king (sdl:draw-filled-circle center (round *piece-radius*) :color piece-color)
-               (sdl:draw-filled-circle center (round (* 0.8 *piece-radius*)) :color *board-color*))))))
+  (with-slots (object owner) tile
+    (unless (eq object :void)
+      (let ((hexagon (iter (for x in *hexagon*)
+                           (collect (vector->sdlpoint (vector-plus x dx)))))
+            (center (vector->sdlpoint dx))
+            (piece-color (cdr (assoc owner *piece-colors*))))
+        (sdl:draw-polygon hexagon :color *board-color* :aa t)
+        (sdl:flood-fill center :surface *surface* :color *board-color*)
+        ;; draw-filled-polygon refuses to work...
+        '(sdl:draw-filled-polygon hexagon :color *board-color*)
+        (case object
+          (:man  (sdl:draw-filled-circle center (round *piece-radius*) :color piece-color))
+          (:king (sdl:draw-filled-circle center (round *piece-radius*) :color piece-color)
+                 (sdl:draw-filled-circle center (round (* 0.8 *piece-radius*)) :color *board-color*)))))))
 
 (defun draw-status (status)
   (sdl:draw-string-solid status *status-position*
@@ -107,27 +98,8 @@
                            "; thinking..."
                            ""))))
 
-(defun submovep (sub super)
-  (iter (for a on sub)
-        (for b on super)
-        (for sub-has-more = (rest a))
-        ;; iter immediately returns nil if this form fails
-        (always (v= (first a) (first b)))
-        ;; if it doesn't, iter stops when it reaches the end of the shortest
-        ;; list; see which one it is. for submovep it is required that super
-        ;; is the longer list.
-        (finally (return (not sub-has-more)))))
-
-;; those candidates that sub is a submove to
-;; use case: user clicks around and builds up a partial move, this will
-;; return the valid moves that the user can click together from there
-(defun supermoves (sub candidates)
-  (iter (for candidate in candidates)
-        (when (submovep sub candidate)
-          (collect candidate))))
-
 (defun draw-move (move)
-  (iter (for b in (mapcar (compose #'v->sdlpoint #'window-position) move))
+  (iter (for b in (mapcar (compose #'vector->sdlpoint #'window-position) move))
         (for a previous b)
         (sdl:draw-filled-circle b *move-radius* :surface *surface* :color *move-color*)
         (unless (null a)

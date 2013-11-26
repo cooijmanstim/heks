@@ -105,21 +105,24 @@
 
 (defun piece-moves (board ij)
   (declare (optimize (speed 3) (safety 1))
-           (type board board))
+           (board board)
+           (v ij))
   (let ((tile (board-tile board ij)))
     (ccase (tile-object tile)
       (:man
        (iter (for didj in (player-forward-directions (tile-owner tile)))
-             (for ij2 = (v+v ij didj))
-             (when (eq (tile-object (board-tile board ij2)) :empty)
-               (collect (list ij ij2)))))
+             (let ((ij2 (the v (v+v ij didj))))
+               (declare (v didj ij2))
+               (when (eq (tile-object (board-tile board ij2)) :empty)
+                 (collect (list ij ij2))))))
       (:king
        (iter (for didj in *all-directions*)
              (nconcing (iter (for d from 1)
-                             (for ij2 = (v+v ij (s*v d didj)))
-                             (declare (fixnum d))
-                             (while (eq (tile-object (board-tile board ij2)) :empty))
-                             (collect (list ij ij2)))))))))
+                             (let ((ij2 (v+v ij (s*v d didj))))
+                               (declare (fixnum d)
+                                        (v didj ij2))
+                               (while (eq (tile-object (board-tile board ij2)) :empty))
+                               (collect (list ij ij2))))))))))
 
 (defun piece-captures (board ij)
   (declare (optimize (speed 3) (safety 1))
@@ -185,6 +188,25 @@
                          (when (null moves)
                            (setf endp t))
                          moves)))))))
+
+(defun submovep (sub super)
+  (iter (for a on sub)
+        (for b on super)
+        (for sub-has-more = (rest a))
+        ;; iter immediately returns nil if this form fails
+        (always (v= (first a) (first b)))
+        ;; if it doesn't, iter stops when it reaches the end of the shortest
+        ;; list; see which one it is. for submovep it is required that super
+        ;; is the longer list.
+        (finally (return (not sub-has-more)))))
+
+;; those candidates that sub is a submove to
+;; use case: user clicks around and builds up a partial move, this will
+;; return the valid moves that the user can click together from there
+(defun supermoves (sub candidates)
+  (iter (for candidate in candidates)
+        (when (submovep sub candidate)
+          (collect candidate))))
 
 
 ;;; MOVE APPLICATION

@@ -51,15 +51,19 @@
 
 (define-modify-macro logxorf (&rest numbers) logxor)
 
-; TODO: use array rather than cons?
+;; an efficient 2d fixnum vector type
+(deftype v ()
+  '(simple-array fixnum (2)))
+
+;(declaim (inline s1 s2 v+v v-v s+v s*v vmap v.v v= angle->v list->v v->list))
 (defun v (x y)
-  (cons x y))
+  (make-array 2 :element-type 'fixnum :initial-contents (list x y)))
 
 (defun s1 (v)
-  (car v))
+  (aref v 0))
 
 (defun s2 (v)
-  (cdr v))
+  (aref v 1))
 
 (defun v+v (u v)
   (v (+ (s1 u) (s1 v))
@@ -68,6 +72,10 @@
 (defun v-v (u v)
   (v (- (s1 u) (s1 v))
      (- (s2 u) (s2 v))))
+
+(defun v.v (u v)
+  (+ (* (s1 u) (s1 v))
+     (* (s2 u) (s2 v))))
 
 (defun s+v (s v)
   (v (+ s (s1 v))
@@ -78,17 +86,11 @@
      (* s (s2 v))))
 
 (defun vmap (fn v)
-  (list->v (mapcar fn (v->list v))))
-
-(defun v.v (u v)
-  (+ (* (s1 u) (s1 v))
-     (* (s2 u) (s2 v))))
+  (v (funcall fn (s1 v))
+     (funcall fn (s2 v))))
 
 (defun v= (u v)
   (equalp u v))
-
-(defun angle->v (a)
-  (v (cos a) (sin a)))
 
 (defun list->v (l)
   (v (first l) (second l)))
@@ -96,17 +98,67 @@
 (defun v->list (v)
   (list (s1 v) (s2 v)))
 
-(defun v->sdlpoint (v)
-  (sdl:point :x (s1 v) :y (s2 v)))
-
 (defun absv<=s (v s)
   (and (<= (s1 v) s)
        (<= (s2 v) s)))
+
+;; more general vector functionality for when efficiency doesn't matter
+(defun vector-plus (u v &optional (result-type (type-of u)))
+  (map result-type #'+ u v))
+
+(defun vector-minus (u v &optional (result-type (type-of u)))
+  (map result-type #'- u v))
+
+(defun scale-vector (scalar vector &optional (result-type (type-of vector)))
+  (map result-type (lambda (x) (* scalar x)) vector))
 
 (defun vector-norm (vector &key (l 2))
   (expt (iter (for x in-vector vector)
               (sum (expt (abs x) l)))
         (/ 1 l)))
+
+(defun matrix (initial-contents)
+  (when-let ((m (length initial-contents))
+             (n (length (elt initial-contents 0))))
+    (make-array (list m n) :initial-contents initial-contents)))
+
+(defun matrix-dot-vector (a x)
+  (destructuring-bind (m n) (array-dimensions a)
+    (let ((y (make-array m)))
+      (iter (for i from 0 below m)
+            (setf (aref y i)
+                  (iter (for j from 0 below n)
+                        (summing (* (aref a i j)
+                                    (aref x j))))))
+      y)))
+
+(defun matrix-inverse (a)
+  (assert (equalp '(2 2) (array-dimensions a))) ;; YAGNI
+  (scale-matrix (/ 1 (- (* (aref a 0 0)
+                           (aref a 1 1))
+                        (* (aref a 0 1)
+                           (aref a 1 0))))
+                (matrix `((,   (aref a 1 1)  ,(- (aref a 0 1)))
+                          (,(- (aref a 1 0))    ,(aref a 0 0))))))
+
+(defun scale-matrix (scalar x)
+  (destructuring-bind (m n) (array-dimensions x)
+    (let ((y (make-array (list m n))))
+      (iter (for i from 0 below m)
+            (iter (for j from 0 below n)
+                  (setf (aref y i j)
+                        (* scalar (aref x i j)))))
+      y)))
+
+(defun angle->vector (a)
+  (vector (cos a) (sin a)))
+
+(defun vector->sdlpoint (vector)
+  (sdl:point :x (elt vector 0)
+             :y (elt vector 1)))
+
+(defun transpose-lists (list-of-lists)
+  (apply #'mapcar #'list list-of-lists))
 
 ;; fn must poll *out-of-time* and return when it becomes true
 (defparameter *out-of-time* nil)
@@ -127,13 +179,4 @@
   (sb-sprof:with-profiling (:loop nil)
     (funcall fn))
   (sb-sprof:report :type :flat))
-
-(defun profile-minimax ()
-  (profile (lambda ()
-             (time-limited 30 (lambda () (minimax-decision (make-initial-state)))))))
-
-(defun profile-mcts ()
-  (profile (lambda ()
-             (time-limited 30 (lambda () (mcts-decision (make-initial-state)))))))
-
 

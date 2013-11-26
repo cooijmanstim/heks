@@ -139,3 +139,12 @@
 ;; TODO: 10000 is a loooong time
          (mcts-player (lambda (state) (mcts-decision state 10000))))
     (learn-feature-weights mcts-player initial-weights)))
+
+(defun profile-minimax ()
+  (profile (lambda ()
+             (time-limited 30 (lambda () (minimax-decision (make-initial-state)))))))
+
+(defun profile-mcts ()
+  (profile (lambda ()
+             (time-limited 30 (lambda () (mcts-decision (make-initial-state)))))))
+

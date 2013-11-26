@@ -45,15 +45,21 @@
 ; bounds checking.  hence 11 instead of 9 here.
 (defparameter *board-size* 11)
 (defparameter *board-dimensions* (v *board-size* *board-size*))
-(defparameter *board-center* (s+v -1/2 (s*v 1/2 *board-dimensions*)))
+(defparameter *board-center* (s*v 1/2 (s+v -1 *board-dimensions*)))
 
-(deftype board () '(array tile (11 11)))
+(deftype board ()
+  `(simple-array tile ,(v->list *board-dimensions*)))
 
-;(declaim (inline board-tile set-board-tile))
+(declaim (inline board-tile set-board-tile))
 (defun board-tile (board ij)
+  (declare (optimize (speed 3))
+           (type board board))
   (aref board (s1 ij) (s2 ij)))
-(defun set-board-tile (board ij value)
-  (setf (aref board (s1 ij) (s2 ij)) value))
+(defun set-board-tile (board ij tile)
+  (declare (optimize (speed 3))
+           (type board board)
+           (type tile tile))
+  (setf (aref board (s1 ij) (s2 ij)) tile))
 (defsetf board-tile set-board-tile)
 
 ;; iter clause for iterating over board interior
@@ -108,8 +114,7 @@
 (defun make-initial-board ()
   (let ((board (make-array (v->list *board-dimensions*)
                            :element-type 'tile
-                           :initial-element (make-tile :void)
-                           :adjustable nil)))
+                           :initial-element (make-tile :void))))
     (iter (for i from 1 below (- (s1 *board-dimensions*) 1))
           (iter (for j from 1 below (- (s2 *board-dimensions*) 1))
                 (for ij = (v i j))
@@ -124,7 +129,7 @@
 
 (defun copy-board (board)
   (let ((board2 (make-array (array-dimensions board)
-                            :element-type 'tile :adjustable nil)))
+                            :element-type 'tile)))
     (iter (for i from 0 below (s1 *board-dimensions*))
           (iter (for j from 0 below (s2 *board-dimensions*))
                 (for ij = (v i j))
