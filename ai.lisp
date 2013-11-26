@@ -252,5 +252,6 @@
             (setf node (select node state))
             (setf node (expand node state))
             (backprop node (rollout state))))
-    (with-slots (children) root-node
+    (with-slots (children nvisits nwins) root-node
+      (print (list :nvisits nvisits :nwins nwins))
       (mcts-node-move (extremum children #'> :key #'mcts-node-nvisits)))))
