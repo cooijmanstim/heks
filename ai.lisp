@@ -11,7 +11,7 @@
 ;; TODO: measure collision rate
 (defstruct transposition
   (depth 0 :type fixnum)
-  (value 0 :type fixnum)
+  (value 0.0 :type evaluation)
   (type nil :type (or null (member :exact :lower :upper)))
   (move nil :type list))
 (sb-ext:define-hash-table-test state-equal state-hash)
@@ -91,8 +91,9 @@
 (defun minimax (state depth ply evaluator
                 &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
                 &aux (original-alpha alpha))
-  (declare (optimize (speed 3) (safety 0))
-           (fixnum depth ply alpha beta)
+  (declare (optimize (speed 3) (safety 1))
+           (fixnum depth ply)
+           (evaluation alpha beta)
            (type (function * fixnum) evaluator))
   (when *out-of-time*
     (throw :out-of-time nil))
@@ -101,7 +102,7 @@
                ;; use stored values
                (with-slots (value type move)
                    transposition
-                 (declare (fixnum value))
+                 (declare (evaluation value))
                  (ccase type
                    (:exact (return-from minimax (values value (list move))))
                    (:lower (maxf alpha value))
@@ -109,7 +110,8 @@
                  (when (>= alpha beta)
                    (return-from minimax (values value (list move)))))))
            (maybe-store-transposition (state alpha beta value depth variation)
-             (declare (fixnum alpha beta value depth))
+             (declare (evaluation alpha beta value)
+                      (fixnum depth))
              ;; store transposition
              (when (>= depth *transposition-minimum-depth*)
                (with-slots ((stored-depth depth)
@@ -148,7 +150,7 @@
                          (evaluation-inverse beta)
                          (evaluation-inverse alpha))
               (finding (cons move subvariation)
-                       maximizing (the fixnum (evaluation-inverse subvalue))
+                       maximizing (the evaluation (evaluation-inverse subvalue))
                        into (variation value)))
             (unapply-move state breadcrumb)
             (maxf alpha value)
@@ -160,7 +162,7 @@
              (maybe-store-transposition state original-alpha beta value depth variation)
              (return (values value variation)))))))
 
-(defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state))
+(defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state) (verbose t))
   ;; use a fresh table with every top-level search
   (let (value
         variation
@@ -177,16 +179,20 @@
     (funcall committer)
     (let ((table-statistics
            (list :ply-nkillers (map 'vector #'length *killer-table*))))
-      (print (list variation *minimax-statistics* table-statistics))
+      (when verbose
+        (print (list variation *minimax-statistics* table-statistics)))
       (first variation))))
 
-(defun evaluation-decision (state &key (evaluator #'evaluate-state))
+(defun evaluation-decision (state &key (evaluator #'evaluate-state) (verbose t))
   (iter (for move in (moves state))
         (for breadcrumb = (apply-move state move))
         (finding move maximizing (funcall evaluator state (moves state))
                  into (best-move value))
         (unapply-move state breadcrumb)
-        (finally (return best-move))))
+        (finally
+         (when verbose
+           (print (list value best-move)))
+         (return best-move))))
 
 (defstruct (mcts-node (:constructor nil))
   (move nil)
@@ -232,7 +238,7 @@
                         0)))))
 
 (defparameter *mcts-maximum-depth* 200)
-(defun mcts-decision (root-state &optional (n most-positive-fixnum))
+(defun mcts-decision (root-state &key (max-sample-size most-positive-fixnum) (verbose t))
   (assert (not (state-endp root-state)))
   (let ((root-node (make-mcts-node root-state)))
     (labels ((select (node state)
@@ -261,13 +267,16 @@
                (iter (while node)
                      (mcts-update node winner)
                      (setq node (mcts-node-parent node)))))
-      (iter (repeat n)
+      (iter (repeat max-sample-size)
             (until *out-of-time*)
             (for node = root-node)
             (for state = (copy-state root-state))
             (setf node (select node state))
             (setf node (expand node state))
             (backprop node (rollout state))))
-    (with-slots (children nvisits nwins) root-node
-      (print (list :nvisits nvisits :nwins nwins))
-      (mcts-node-move (extremum children #'> :key #'mcts-node-nvisits)))))
+    (with-slots (children (root-nvisits nvisits)) root-node
+      (let ((best-child (extremum children #'> :key #'mcts-node-nvisits)))
+        (with-slots ((move-nvisits nvisits) (move-nwins nwins) move) best-child
+          (when verbose
+            (print (list :nsamples root-nvisits :move-value (/ move-nwins 1.0 move-nvisits) :move move)))
+          move)))))

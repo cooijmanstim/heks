@@ -2,8 +2,11 @@
 
 (declaim (optimize (debug 3) (safety 3)))
 
-(defparameter *evaluation-maximum* (min (abs most-negative-fixnum) (abs most-positive-fixnum)))
+(deftype evaluation () 'single-float)
+
+(defparameter *evaluation-maximum* (min (abs most-negative-single-float) (abs most-positive-single-float)))
 (defparameter *evaluation-minimum* (- *evaluation-maximum*))
+(declaim (evaluation *evaluation-maximum* *evaluation-minimum*))
 
 (defun evaluation-inverse (v)
   (- v))
@@ -31,5 +34,5 @@
 (defun evaluate-state (state moves)
   (if (null moves)
       *evaluation-minimum* ;; no moves, player loses
-      (+ (round (gaussian-random))
+      (+ (coerce (gaussian-random) 'single-float)
          (piece-differential state))))

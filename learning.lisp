@@ -37,8 +37,10 @@
                       (collect (if (match-players opponent player) 0 1)))))
     (values (mean sample) (standard-deviation sample :biased nil))))
 
-;; return t if player1 won, nil otherwise
+;; let player1 (white) play a game against player2 (black)
+;; return t if white won, nil otherwise
 (defun match-players (player1 player2)
+  (declare (optimize debug))
   ;; players is a circular list of the two players
   (let ((players (list player1 player2)))
     (rplacd (last players) players)
@@ -54,7 +56,8 @@
           (let ((move (funcall player state)))
             (assert (member move moves :test #'move-equal))
             (push (apply-move state move) breadcrumbs))
-          (finally (return (eq player player2))))))
+          (finally
+           (return (eq (state-player state) :black))))))
 
 (defun make-learned-evaluator (weights)
   (lambda (state moves)

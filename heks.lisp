@@ -87,7 +87,7 @@
                     (computer-move :mcts)))))
           (:mouse-button-up-event
            (:button button :x x :y y)
-           (cond ((= button sdl:sdl-button-left)
+          (cond ((= button sdl:sdl-button-left)
                   (unless computer-deciding
                     (update-move (append submove (list (board-position (v x y)))))))
                  ((= button sdl:sdl-button-right)
@@ -114,7 +114,7 @@
 ;; function in a 1-ply minimax search
 (defun learn-feature-weights (opponent initial-weights)
   (let* ((nsteps 1000)
-         (nsamples 30))
+         (nsamples 10))
     (labels ((make-player (weights)
                (lambda (state)
                  (evaluation-decision state :evaluator (make-learned-evaluator weights))))
@@ -124,8 +124,10 @@
                  (values mean stdev)))
              (goodness (weights)
                (+ (* 0.1 (vector-norm weights :l 1))
+                  (* 0.2 (vector-norm weights :l 2))
                   (* 0.9 (- (performance weights))))))
       (multiple-value-bind (initial-mean initial-stdev) (performance initial-weights)
+        (format t "initial performance ~D (±~D)~%" initial-mean initial-stdev)
         (let ((final-weights (spsa nsteps #'goodness initial-weights :c (+ initial-stdev 1e-3))))
           (multiple-value-bind (final-mean final-stdev) (performance final-weights)
             (fresh-line)
@@ -136,8 +138,7 @@
 (defun learn-feature-weights-against-mcts ()
   (let* ((k (second (array-dimensions *featuremap-map*)))
          (initial-weights (make-sequence '(vector single-float) k :initial-element (/ 1.0 k)))
-;; TODO: 10000 is a loooong time
-         (mcts-player (lambda (state) (mcts-decision state 10000))))
+         (mcts-player (lambda (state) (mcts-decision state :max-sample-size 10000))))
     (learn-feature-weights mcts-player initial-weights)))
 
 (defun profile-minimax ()
