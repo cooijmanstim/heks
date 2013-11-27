@@ -152,7 +152,6 @@
                                        (3 4 :man :white)))))
     (assert-equality #'moveset-equal
                      (list (list (v 1 1) (v 3 1))
-                           (list (v 1 1) (v 1 3))
                            (list (v 1 1) (v 1 3) (v 3 3)))
                      (piece-captures board (v 1 1)))
     (assert-equality #'moveset-equal

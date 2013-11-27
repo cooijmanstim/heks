@@ -93,13 +93,14 @@
 ;;; MOVE GENERATION
 
 (defun displacement-direction (ij ij2)
-  (declare (v ij ij2))
-  (let* ((didj (v-v ij2 ij))
-         (n (the fixnum (max (the fixnum (abs (s1 didj)))
-                             (the fixnum (abs (s2 didj)))))))
-    (declare (fixnum n)
-             (v didj))
-    (values (scale-vector (/ 1 n) didj) n)))
+  (declare (optimize (speed 3) (safety 0))
+           (v ij ij2))
+  (let* ((didj (v-v ij2 ij)))
+    (declare (v didj))
+    (cond ((= (s1 didj) 0) (values (v 0 (signum (s2 didj))) (the fixnum (abs (s2 didj)))))
+          ((= (s2 didj) 0) (values (v (signum (s1 didj)) 0) (the fixnum (abs (s1 didj)))))
+          ((= (s1 didj) (s2 didj)) (values (v (signum (s1 didj)) (signum (s2 didj))) (the fixnum (abs (s1 didj)))))
+          (t (assert nil)))))
 
 (defparameter *all-directions*
   (mapcar #'list->v
@@ -144,6 +145,7 @@
     (labels ((recur (ij capture-points &aux captures)
                (declare (v ij))
                (dolist (didj *all-directions*)
+                 (declare (v didj))
                  (block inner-loop
                    (do ((ij2 (v+v ij didj) (v+v ij2 didj))
                         (capture-point nil))
@@ -164,9 +166,10 @@
                              ((and capture-point
                                    (eq object :empty))
                               ;; have passed over an enemy piece. possible stopping point or turning point.
-                              (push (list ij ij2) captures)
-                              (dolist (continuation (recur ij2 (cons capture-point capture-points)))
-                                (push (cons ij continuation) captures))
+                              (if-let ((continuations (recur ij2 (cons capture-point capture-points))))
+                                (dolist (continuation continuations)
+                                  (push (cons ij continuation) captures))
+                                (push (list ij ij2) captures))
                               ;; if we can't fly over empties, then we must stop at the first empty after
                               ;; capture.
                               (unless can-fly
