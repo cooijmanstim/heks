@@ -50,19 +50,16 @@
   (symbol-macrolet ((killers (aref *killer-table* ply)))
     (deletef killers move :test #'move-equal)
     (push move killers)
-    (when-let ((max-cdr (nthcdr *max-killers* killers)))
+    (when-let ((max-cdr (nthcdr (1- *max-killers*) killers)))
       (rplacd max-cdr nil))))
 
 (defun order-moves (depth ply state moves)
+  ;; use transposition move regardless of depth
   (declare (ignore depth))
-  (let ((prioritized-moves (lookup-killers ply moves)))
-    ;; use transposition move regardless of depth
-    (when-let ((transposition (lookup-transposition state)))
-      (with-slots (move) transposition
-        (push move prioritized-moves)))
-    (if prioritized-moves
-        (nconc prioritized-moves (nset-difference moves prioritized-moves :test #'move-equal))
-        moves)))
+  (append (when-let ((transposition (lookup-transposition state)))
+            (list (transposition-move transposition)))
+          (lookup-killers ply moves)
+          moves))
 
 (defstruct minimax-statistics
   (mean-branching-factor 0.0 :type single-float)
