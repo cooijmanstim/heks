@@ -142,7 +142,8 @@
 
 (defun profile-minimax ()
   (profile (lambda ()
-             (time-limited 30 (lambda () (minimax-decision (make-initial-state)))))))
+             (time-limited 30 (lambda ()
+                                (minimax-decision (make-initial-state)))))))
 
 (defun profile-mcts ()
   (profile (lambda ()

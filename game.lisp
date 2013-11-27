@@ -1,6 +1,6 @@
 (in-package :heks)
 
-(declaim (optimize (debug 3)))
+(declaim (optimize (speed 3) (safety 1)))
 
 
 ;;; STATE MANIPULATION
@@ -12,12 +12,14 @@
 
 ;; displace the object on a to b, assume b empty
 (defun displace-piece* (board a b)
+  (declare (v a b))
   (assert (eq (tile-object (board-tile board b)) :empty))
   (psetf (board-tile board b) (board-tile board a)
          (board-tile board a) (board-tile board b)))
 
 ;; empty the tile and return whatever was there
 (defun remove-piece* (board ij)
+  (declare (v ij))
   (prog1
       (board-tile board ij)
     (setf (board-tile board ij) (make-tile :empty))))
@@ -63,6 +65,7 @@
 ;; maybe-crown* with hash update
 (defun maybe-crown (state move)
   (with-slots (board hash) state
+    (declare (zobrist-hash hash))
     (let* ((ij (lastcar move))
            (tile (board-tile board ij)))
       (logxorf hash (tile-zobrist-bitstring tile ij))
@@ -72,8 +75,10 @@
 ;; uncrown* with hash update
 (defun uncrown (state move)
   (with-slots (board hash) state
+    (declare (zobrist-hash hash))
     (let* ((ij (lastcar move))
            (tile (board-tile board ij)))
+      (declare (v ij))
       (logxorf hash (tile-zobrist-bitstring tile ij))
       (uncrown* (board-tile (state-board state) ij))
       (logxorf hash (tile-zobrist-bitstring tile ij)))))
@@ -81,16 +86,20 @@
 ;; toggle-player* with hash update
 (defun toggle-player (state)
   (toggle-player* state)
-  (logxorf (state-hash state) (zobrist-player-bitstring)))
+  (logxorf (the zobrist-hash (state-hash state))
+           (the zobrist-hash (zobrist-player-bitstring))))
 
 
 ;;; MOVE GENERATION
 
 (defun displacement-direction (ij ij2)
+  (declare (v ij ij2))
   (let* ((didj (v-v ij2 ij))
-         (n (max (abs (s1 didj))
-                 (abs (s2 didj)))))
-    (values (s*v (/ 1 n) didj) n)))
+         (n (the fixnum (max (the fixnum (abs (s1 didj)))
+                             (the fixnum (abs (s2 didj)))))))
+    (declare (fixnum n)
+             (v didj))
+    (values (scale-vector (/ 1 n) didj) n)))
 
 (defparameter *all-directions*
   (mapcar #'list->v
@@ -104,90 +113,117 @@
   (not (mismatch a b :test #'v=)))
 
 (defun piece-moves (board ij)
-  (declare (optimize (speed 3) (safety 1))
+  (declare (optimize (speed 3) (safety 0))
            (board board)
            (v ij))
-  (let ((tile (board-tile board ij)))
-    (ccase (tile-object tile)
-      (:man
-       (iter (for didj in (player-forward-directions (tile-owner tile)))
-             (let ((ij2 (the v (v+v ij didj))))
-               (declare (v didj ij2))
-               (when (eq (tile-object (board-tile board ij2)) :empty)
-                 (collect (list ij ij2))))))
-      (:king
-       (iter (for didj in *all-directions*)
-             (nconcing (iter (for d from 1)
-                             (let ((ij2 (v+v ij (s*v d didj))))
-                               (declare (fixnum d)
-                                        (v didj ij2))
-                               (while (eq (tile-object (board-tile board ij2)) :empty))
-                               (collect (list ij ij2))))))))))
+  (with-slots (object owner) (board-tile board ij)
+    (let ((directions (ccase object
+                        (:man (player-forward-directions owner))
+                        (:king *all-directions*)))
+          (moves '()))
+      (dolist (didj directions)
+        (declare (v didj))
+        (if (not (can-fly object))
+            (let ((ij2 (v+v ij didj)))
+              (declare (v ij2))
+              (when (tile-empty-p board ij2)
+                (push (list ij ij2) moves)))
+            (do ((ij2 (v+v ij didj) (v+v ij2 didj)))
+                ((not (tile-empty-p board ij2)))
+              (declare (v ij2))
+              (push (list ij ij2) moves))))
+      moves)))
 
 (defun piece-captures (board ij)
-  (declare (optimize (speed 3) (safety 1))
-           (type board board))
+  (declare (optimize (speed 3) (safety 0))
+           (type board board)
+           (v ij))
   (let* ((tile (board-tile board ij))
          (player (tile-owner tile))
          (can-fly (can-fly (tile-object tile))))
-    (labels ((recur (ij capture-points)
-               (iter (for didj in *all-directions*)
-                     (with captures = '())
-                     (iter inner-loop
-                           (for d from 1)
-                           (for ij2 = (v+v ij (s*v d didj)))
-                           (with capture-point = nil)
-                           (declare (fixnum d))
-                           (with-slots (object owner) (board-tile board ij2)
-                             (cond ((and (null capture-point)
-                                         (eq object :empty)
-                                         can-fly)
-                                    ;; haven't yet passed over an enemy piece. no capture, but keep going.
-                                    )
-                                   ((and (null capture-point)
-                                         (member object '(:man :king))
-                                         (eq owner (opponent player))
-                                         (not (member ij2 capture-points :test #'v=)))
-                                    ;; passing over a fresh enemy piece.
-                                    (setf capture-point ij2))
-                                   ((and capture-point
-                                         (eq object :empty))
-                                    ;; have passed over an enemy piece. possible stopping point or turning point.
-                                    (push (list ij ij2) captures)
-                                    (iter (for continuation in (recur ij2 (cons capture-point capture-points)))
-                                          (push (cons ij continuation) captures))
-                                    ;; if we can't fly over empties, then we must stop at the first empty after
-                                    ;; capture.
-                                    (unless can-fly
-                                      (return-from inner-loop)))
-                                   (t
-                                    ;; this is going nowhere
-                                    (return-from inner-loop)))))
-                     (finally (return captures)))))
+    (labels ((recur (ij capture-points &aux captures)
+               (declare (v ij))
+               (dolist (didj *all-directions*)
+                 (block inner-loop
+                   (do ((ij2 (v+v ij didj) (v+v ij2 didj))
+                        (capture-point nil))
+                       (nil)
+                     (declare (v ij2))
+                     (with-slots (object owner) (board-tile board ij2)
+                       (cond ((and (null capture-point)
+                                   (eq object :empty)
+                                   can-fly)
+                              ;; haven't yet passed over an enemy piece. no capture, but keep going.
+                              )
+                             ((and (null capture-point)
+                                   (member object '(:man :king))
+                                   (eq owner (opponent player))
+                                   (not (member ij2 capture-points :test #'v=)))
+                              ;; passing over a fresh enemy piece.
+                              (setf capture-point ij2))
+                             ((and capture-point
+                                   (eq object :empty))
+                              ;; have passed over an enemy piece. possible stopping point or turning point.
+                              (push (list ij ij2) captures)
+                              (dolist (continuation (recur ij2 (cons capture-point capture-points)))
+                                (push (cons ij continuation) captures))
+                              ;; if we can't fly over empties, then we must stop at the first empty after
+                              ;; capture.
+                              (unless can-fly
+                                (return-from inner-loop)))
+                             (t
+                              ;; this is going nowhere
+                              (return-from inner-loop)))))))
+               captures))
       (recur ij '()))))
 
 ;;; a move is a list (x y z ...) of points visited, and everything between the points is captured
 ;;; NOTE: potentially modifies state; sets endp if no moves. this is unconditionally set to nil by
 ;;; unapply-move.
 (defun moves (state)
-  (declare (optimize (debug 3) (safety 1)))
+  (declare (optimize (speed 3) (safety 0)))
   (with-slots (board player endp) state
     (declare (type board board))
-    (iter (for tile at ij of board)
-          (with-slots (owner) tile
-            (when (eq owner player)
-              (nconcing (piece-captures board ij) into captures)
-              (unless captures
-                (nconcing (piece-moves board ij) into moves))))
-          (finally
-           (return (if captures
-                       ;; longest capture is mandatory
-                       (cl-utilities:extrema captures #'> :key #'length)
-                       (progn
-                         ;; if no moves, mark the game as over
-                         (when (null moves)
-                           (setf endp t))
-                         moves)))))))
+    (unless endp
+      (let (captures-lists moves-lists
+            (m (- *board-size* 1))
+            (n (- *board-size* 1)))
+        (declare (fixnum m n))
+        (do ((i 1 (1+ i)))
+            ((= i m))
+          (declare (fixnum i))
+          (do* ((j 1 (1+ j))
+                (ij (v i j) (v i j)))
+               ((= j n))
+            (declare (fixnum j)
+                     (v ij))
+            (when (eq (tile-owner (board-tile board ij)) player)
+              (let (piece-captures piece-moves)
+                (setf piece-captures (piece-captures board ij))
+                (if piece-captures
+                    (push piece-captures captures-lists)
+                    (unless captures-lists
+                      (setq piece-moves (piece-moves board ij))
+                      (when piece-moves
+                        (push piece-moves moves-lists))))))))
+        (cond (captures-lists
+               ;; player must choose one of the longest captures
+               (let ((highest-length 1)
+                     (longest-captures '()))
+                 (dolist (captures captures-lists)
+                   (dolist (capture captures)
+                     (let ((length (length (the list capture))))
+                       (cond ((> length highest-length)
+                              (setf highest-length length
+                                    longest-captures (list capture)))
+                             ((= length highest-length)
+                              (push capture longest-captures))))))
+                 longest-captures))
+              (moves-lists
+               (reduce #'nconc moves-lists))
+              (t
+               (setf endp t)
+               nil))))))
 
 (defun submovep (sub super)
   (iter (for a on sub)
@@ -219,9 +255,10 @@
   (crowned nil :type boolean))
 
 (defun apply-move (state move)
+  (declare (optimize (speed 3) (safety 0)))
   (with-slots (board player endp) state
     (assert (and move (not (state-endp state))))
-    (let* ((initial-tile (board-tile board (car move)))
+    (let* ((initial-tile (board-tile board (the v (car move))))
            (moving-object (tile-object initial-tile))
            (can-fly (can-fly moving-object))
            (capture-points '()))
@@ -231,29 +268,31 @@
       ;; do some validity checking. the checks here are safety nets
       ;; rather than guarantees. men's backward movement is not prevented,
       ;; mandatory captures are not enforced.
-      (setq capture-points
-            (iter (for next-ij in (rest move))
-                  (for prev-ij previous next-ij initially (first move))
-                  (nconcing
-                   (multiple-value-bind (didj n) (displacement-direction prev-ij next-ij)
-                     (assert (member didj *all-directions* :test #'v=))
-                     ;; the only condition on the last tile is that it is empty
-                     (assert (eq :empty (tile-object (board-tile board next-ij))))
-                     ;; conditions on the rest of the tiles
-                     (iter (for k from 1 below n)
-                           (for ij = (v+v prev-ij (s*v k didj)))
-                           (with capture-point = nil)
-                           (with-slots (object owner) (board-tile board ij)
-                             (ccase object
-                               (:empty
-                                (assert can-fly))
-                               ((:man :king)
-                                (assert (not (or capture-point (eq owner player))))
-                                (setq capture-point ij)))
-                             (finally (return
-                                        (if capture-point
-                                            (list capture-point)
-                                            '())))))))))
+      (do ((prev-ij-cons move       (cdr prev-ij-cons))
+           (next-ij-cons (cdr move) (cdr next-ij-cons)))
+          ((null next-ij-cons))
+        (multiple-value-bind (didj n)
+            (displacement-direction (car prev-ij-cons)
+                                    (car next-ij-cons))
+          (assert (member didj *all-directions* :test #'v=))
+          ;; the only condition on the last tile is that it is empty
+          (assert (eq :empty (tile-object (board-tile board (car next-ij-cons)))))
+          ;; conditions on the rest of the tiles
+          (let (capture-point)
+            (do ((k 1 (1+ k))
+                 (ij (v+v (the v (car prev-ij-cons)) didj) (v+v ij didj)))
+                ((= k n))
+              (declare (fixnum k n)
+                       (v ij))
+              (with-slots (object owner) (board-tile board ij)
+                (ccase object
+                  (:empty
+                   (assert can-fly))
+                  ((:man :king)
+                   (assert (not (or capture-point (eq owner player))))
+                   (setq capture-point ij)))))
+            (when capture-point
+              (push capture-point capture-points)))))
       ;; now modify state
       (displace-piece state (car move) (lastcar move))
       (toggle-player state)
@@ -268,6 +307,7 @@
                          :crowned crowned)))))
   
 (defun unapply-move (state breadcrumb)
+  (declare (optimize (speed 3) (safety 1)))
   (with-slots (move capture-points capture-tiles crowned) breadcrumb
     (iter (for ij in capture-points)
           (for tile in capture-tiles)

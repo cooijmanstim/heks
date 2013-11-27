@@ -39,16 +39,19 @@
   (and (eq (tile-object a) (tile-object b))
        (eq (tile-owner  a) (tile-owner  b))))
 
+(defun tile-empty-p (board ij)
+  (eq (tile-object (board-tile board ij)) :empty))
 
 ; since our choice of representation already forces us to deal with :void tiles,
 ; we might as well use a border of :void tiles to avoid the need for explicit
 ; bounds checking.  hence 11 instead of 9 here.
-(defparameter *board-size* 11)
-(defparameter *board-dimensions* (v *board-size* *board-size*))
-(defparameter *board-center* (s*v 1/2 (s+v -1 *board-dimensions*)))
-
 (deftype board ()
-  `(simple-array tile ,(v->list *board-dimensions*)))
+  '(simple-array tile (11 11)))
+
+(defparameter *board-size* 11)
+(declaim (fixnum *board-size*))
+(defparameter *board-dimensions* (v *board-size* *board-size*))
+(defparameter *board-center* (scale-vector 1/2 (s+v -1 *board-dimensions*)))
 
 (declaim (inline board-tile set-board-tile))
 (defun board-tile (board ij)
@@ -148,7 +151,7 @@
   (board nil :type (or null board))
   (player :white :type player)
   (endp nil :type boolean)
-  (hash 0 :type integer))
+  (hash 0 :type zobrist-hash))
 
 (defun make-state (&optional
                    (board (make-initial-board))

@@ -3,13 +3,13 @@
 (declaim (optimize (debug 3)))
 
 (defparameter *window-dimensions* (v 500 500))
-(defparameter *window-center* (s*v 1/2 *window-dimensions*))
+(defparameter *window-center* (scale-vector 1/2 *window-dimensions*))
 
 (defparameter *surface* nil)
 
 (defparameter *font* (sdl:initialise-font sdl:*font-10x20*))
 (defparameter *font-dimensions* (v (sdl:char-width  *font*)
-                                        (sdl:char-height *font*)))
+                                   (sdl:char-height *font*)))
 
 (defparameter *status-position* (sdl:point :x 10 :y (- (s2 *window-dimensions*) 10 (s2 *font-dimensions*))))
 

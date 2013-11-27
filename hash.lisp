@@ -2,6 +2,8 @@
 
 (declaim (optimize (debug 3)))
 
+(deftype zobrist-hash () 'fixnum)
+
 (defparameter *zobrist-ceiling* most-positive-fixnum)
 (defun zobrist-bitstring ()
   (random *zobrist-ceiling*))
@@ -20,6 +22,7 @@
 (defparameter *zobrist-bitstring-black-to-move* (zobrist-bitstring))
 
 ;; desperately-TODO: stop using keywords for white/black and man/king
+(declaim (ftype (function (tile v) zobrist-hash) tile-zobrist-bitstring))
 (defun tile-zobrist-bitstring (tile ij)
   (with-slots (object owner) tile
     (if (not (member object '(:man :king)))

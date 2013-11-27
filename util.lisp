@@ -55,35 +55,40 @@
 (deftype v ()
   '(simple-array fixnum (2)))
 
-;(declaim (inline s1 s2 v+v v-v s+v s*v vmap v.v v= angle->v list->v v->list))
+(declaim (inline v s1 s2 v+v v-v s+v s*v vmap v.v v= list->v v->list))
 (defun v (x y)
+  (declare (fixnum x y))
   (make-array 2 :element-type 'fixnum :initial-contents (list x y)))
 
+(declaim (ftype (function (v) fixnum) s1 s2))
 (defun s1 (v)
+  (declare (v v))
   (aref v 0))
-
 (defun s2 (v)
+  (declare (v v))
   (aref v 1))
 
+(declaim (ftype (function (v v) v) v+v v-v))
 (defun v+v (u v)
-  (v (+ (s1 u) (s1 v))
-     (+ (s2 u) (s2 v))))
+  (v (the fixnum (+ (s1 u) (s1 v)))
+     (the fixnum (+ (s2 u) (s2 v)))))
 
 (defun v-v (u v)
-  (v (- (s1 u) (s1 v))
-     (- (s2 u) (s2 v))))
+  (v (the fixnum (- (s1 u) (s1 v)))
+     (the fixnum (- (s2 u) (s2 v)))))
 
 (defun v.v (u v)
-  (+ (* (s1 u) (s1 v))
-     (* (s2 u) (s2 v))))
+  (+ (the fixnum (* (s1 u) (s1 v)))
+     (the fixnum (* (s2 u) (s2 v)))))
 
+(declaim (ftype (function (fixnum v) v) s+v s*v))
 (defun s+v (s v)
-  (v (+ s (s1 v))
-     (+ s (s2 v))))
+  (v (the fixnum (+ s (s1 v)))
+     (the fixnum (+ s (s2 v)))))
 
 (defun s*v (s v)
-  (v (* s (s1 v))
-     (* s (s2 v))))
+  (v (the fixnum (* s (s1 v)))
+     (the fixnum (* s (s2 v)))))
 
 (defun vmap (fn v)
   (v (funcall fn (s1 v))
@@ -179,4 +184,3 @@
   (sb-sprof:with-profiling (:loop nil)
     (funcall fn))
   (sb-sprof:report :type :flat))
-

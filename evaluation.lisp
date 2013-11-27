@@ -8,6 +8,8 @@
 (defun evaluation-inverse (v)
   (- v))
 
+(declaim (ftype (function (*) fixnum) piece-value piece-differential))
+
 (defun piece-value (object)
   (case object
     (:man 1)
@@ -16,7 +18,8 @@
 
 (defun piece-differential (state)
   (let ((ours 0) (theirs 0))
-    (declare (fixnum ours theirs))
+    (declare (optimize (speed 3) (safety 0))
+             (fixnum ours theirs))
     (with-slots ((us player)) state
       (iter (for tile at ij of (state-board state))
             (with-slots (object owner) tile
