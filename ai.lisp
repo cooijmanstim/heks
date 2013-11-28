@@ -91,7 +91,7 @@
 (defun minimax (state depth ply evaluator
                 &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
                 &aux (original-alpha alpha))
-  (declare (optimize (speed 3) (safety 1))
+  (declare (optimize (speed 3) (safety 0))
            (fixnum depth ply)
            (evaluation alpha beta)
            (type (function * fixnum) evaluator))
@@ -274,9 +274,11 @@
             (setf node (select node state))
             (setf node (expand node state))
             (backprop node (rollout state))))
-    (with-slots (children (root-nvisits nvisits)) root-node
+    (with-slots (children (root-nvisits nvisits) (root-nwins nwins)) root-node
       (let ((best-child (extremum children #'> :key #'mcts-node-nvisits)))
         (with-slots ((move-nvisits nvisits) (move-nwins nwins) move) best-child
-          (when verbose
-            (print (list :nsamples root-nvisits :move-value (/ move-nwins 1.0 move-nvisits) :move move)))
-          move)))))
+          (let ((state-value (coerce (- 1 (/ root-nwins root-nvisits)) 'single-float))
+                (move-value  (coerce      (/ move-nwins move-nvisits)  'single-float)))
+            (when verbose
+              (print (list :nsamples root-nvisits :state-value state-value :move-value move-value :move move)))
+            (values move move-value state-value)))))))

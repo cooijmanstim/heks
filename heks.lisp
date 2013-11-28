@@ -96,51 +96,6 @@
           (:video-expose-event () (sdl:update-display)))))))
 
 
-;; performs moves randomly, writing resulting states to stream every now and then.
-(defun generate-states (stream n)
-  (let ((storage-rate 0.05))
-    (iter (with state = (make-initial-state))
-          (for moves = (moves state))
-          (while (> n 0))
-          (when (null moves)
-            (setf state (make-initial-state))
-            (next-iteration))
-          (apply-move state (random-elt moves))
-          (when (< (random 1.0) storage-rate)
-            (format-vector stream (state->vector state))
-            (decf n)))))
-
-;; use spsa to maximize win count against opponent when using the evaluation
-;; function in a 1-ply minimax search
-(defun learn-feature-weights (opponent initial-weights)
-  (let* ((nsteps 1000)
-         (nsamples 10))
-    (labels ((make-player (weights)
-               (lambda (state)
-                 (evaluation-decision state :evaluator (make-learned-evaluator weights))))
-             (performance (weights)
-               (multiple-value-bind (mean stdev)
-                   (measure-performance (make-player weights) opponent nsamples)
-                 (values mean stdev)))
-             (goodness (weights)
-               (+ (* 0.1 (vector-norm weights :l 1))
-                  (* 0.2 (vector-norm weights :l 2))
-                  (* 0.9 (- (performance weights))))))
-      (multiple-value-bind (initial-mean initial-stdev) (performance initial-weights)
-        (format t "initial performance ~D (±~D)~%" initial-mean initial-stdev)
-        (let ((final-weights (spsa nsteps #'goodness initial-weights :c (+ initial-stdev 1e-3))))
-          (multiple-value-bind (final-mean final-stdev) (performance final-weights)
-            (fresh-line)
-            (format t "optimized performance from ~D (±~D) to ~D (±~D)~%"
-                    initial-mean initial-stdev final-mean final-stdev)
-            final-weights))))))
-
-(defun learn-feature-weights-against-mcts ()
-  (let* ((k (second (array-dimensions *featuremap-map*)))
-         (initial-weights (make-sequence '(vector single-float) k :initial-element (/ 1.0 k)))
-         (mcts-player (lambda (state) (mcts-decision state :max-sample-size 10000))))
-    (learn-feature-weights mcts-player initial-weights)))
-
 (defun profile-minimax ()
   (profile (lambda ()
              (time-limited 30 (lambda ()

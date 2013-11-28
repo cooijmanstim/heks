@@ -2,7 +2,6 @@
 
 (declaim (optimize (debug 3)))
 
-;; each state is written on a separate line, as a space-separated vector of bits.
 ;; the vector encompasses four bitboards: one for each combination of white/black
 ;; and man/king.
 ;; these are used as inputs to a neural network later.  the representation is redundant,
@@ -25,11 +24,6 @@
                                            0)
                                        vector)))))
       vector)))
-
-(defun format-vector (stream v)
-  (fresh-line stream)
-  (iter (for elt in-vector v)
-        (format stream "~A " elt)))
 
 (defun measure-performance (player opponent n)
   (let ((sample (iter (repeat (/ n 2))
@@ -64,11 +58,10 @@
     (declare (ignore moves))
     (dot-product weights (features (state->vector state)))))
 
-(defun dot-product (us vs)
-  (assert (length= us vs))
-  (iter (for u in-vector us)
-        (for v in-vector vs)
-        (summing (* u v))))
+(defun format-vector (stream v)
+  (fresh-line stream)
+  (iter (for elt in-vector v)
+        (format stream "~A " elt)))
 
 (defun load-array-from-file (file-name)
   (with-open-file (stream file-name)
@@ -105,40 +98,114 @@
 ;; they sum to 1 the linear combination of features will be in [0,1]
 ;; choose c approximately equal to the standard deviation of the measurements fn
 (defun spsa (n fn theta &key (c 0.5))
-  ;; if initial theta is zero, all dthetas will be too large
+  ;; if initial theta is zero, it won't move
   (assert (not (every #'zerop theta)))
-  (labels ((apply-delta (xs dxs scale)
-             (map '(vector single-float)
-                  (lambda (x dx)
-                    (+ x (* scale dx)))
-                  xs dxs)))
-    (let ((a 1) (bigA (/ n 10)) (alpha 0.602) (gamma 0.101)
-          (thetas (list theta)))
-      (iter (for k from 1 to n)
-            (for ak = (/ a (expt (+ k bigA) alpha)))
-            (for ck = (/ c (expt k gamma)))
-            (for delta = (iter (for x in-vector theta)
-                               (collect (- (* (random 2) 2) 1))))
-            (for theta- = (apply-delta theta delta (- ck)))
-            (for theta+ = (apply-delta theta delta ck))
-            (for y- = (funcall fn theta-))
-            (for y+ = (funcall fn theta+))
-            (for g^ = (map '(vector single-float)
-                           (lambda (d)
-                             (/ (- y+ y-) 2 ck d))
-                           delta))
-            (for dtheta = (map '(vector single-float)
-                               (lambda (g^)
-                                 (* -1 ak g^))
-                               g^))
-            ;; repeatedly halve dtheta until ||dtheta|| is not stupidly large
-            ;; slows convergence at worst, enables convergence at best
-            (iter (for dtheta-norm = (vector-norm dtheta))
-                  (with theta-norm = (vector-norm theta))
-              (while (> dtheta-norm (* 2 theta-norm)))
-              (iter (for i index-of-vector dtheta)
-                    (setf (aref dtheta i) (/ (aref dtheta i) 2))))
-            (setf theta (map '(vector single-float) #'+ theta dtheta))
-            (push theta thetas)
-            (print theta))
-      (values theta thetas))))
+  (let ((a 1) (bigA (/ n 10)) (alpha 0.602) (gamma 0.101)
+        (thetas (list theta)))
+    (iter (for k from 1 to n)
+          (for ak = (/ a (expt (+ k bigA) alpha)))
+          (for ck = (/ c (expt k gamma)))
+          (for delta = (iter (for x in-vector theta)
+                             (collect (- (* (random 2) 2) 1))))
+          (for theta- = (vector-plus theta (scale-vector (- ck) delta)))
+          (for theta+ = (vector-plus theta (scale-vector (+ ck) delta)))
+          (for y- = (funcall fn theta-))
+          (for y+ = (funcall fn theta+))
+          (for g^ = (map '(vector single-float)
+                         (lambda (d)
+                           (/ (- y+ y-) 2 ck d))
+                         delta))
+          (for dtheta = (scale-vector (* -1 ak) g^))
+          ;; constrain dtheta to have norm at most twice that of theta
+          ;; slows convergence at worst, enables convergence at best
+          (let ((dtheta-norm (vector-norm dtheta))
+                (dtheta-norm-max (* 2 (vector-norm theta))))
+            (when (> dtheta-norm dtheta-norm-max)
+              (setf dtheta (scale-vector (/ dtheta-norm-max dtheta-norm) dtheta))))
+          (setf theta (vector-plus theta dtheta))
+          (push theta thetas)
+          (print (list k theta)))
+    (values theta thetas)))
+
+;; performs moves randomly, calling fn with the state every now and then
+(defun generate-states (n fn)
+  (let ((observation-rate 0.05))
+    (iter (with state = (make-initial-state))
+          (for moves = (moves state))
+          (while (> n 0))
+          (when (null moves)
+            (setf state (make-initial-state))
+            (next-iteration))
+          (apply-move state (random-elt moves))
+          (when (< (random 1.0) observation-rate)
+            (funcall fn state)
+            (decf n)))))
+
+(defun generate-mcts-evaluated-state-vectors (n mcts-sample-budget fn)
+  (generate-states n
+                   (lambda (state)
+                     (multiple-value-bind (move move-value state-value)
+                         (mcts-decision state :max-sample-size mcts-sample-budget)
+                       (declare (ignore move move-value))
+                       (let ((state-vector (state->vector state)))
+                         (vector-push-extend state-value state-vector)
+                         (funcall fn state-vector))))))
+
+(defun dump-mcts-evaluated-state-vectors (n mcts-sample-budget file-name)
+  (with-output-to-file (stream file-name)
+    (generate-mcts-evaluated-state-vectors
+     n mcts-sample-budget
+     (lambda (state-vector)
+       (format-vector stream state-vector)))))
+
+(defun random-search-feature-weights (opponent)
+  (iter (with nsamples = 30)
+        (for n from 1)
+        (for weights = (map '(vector single-float)
+                            (lambda (i)
+                              (declare (ignore i))
+                              (coerce (gaussian-random) 'single-float))
+                            (iota (second (array-dimensions *featuremap-map*)))))
+        (multiple-value-bind (mean stdev)
+            (measure-performance 
+             (lambda (state)
+               (evaluation-decision state :evaluator (make-learned-evaluator weights) :verbose nil))
+             opponent nsamples)
+          (print (list weights mean stdev))
+          (finding weights maximizing mean into (best-weights best-mean)))
+        (when (= 0 (mod n 30))
+          (fresh-line)
+          (format t "best weights so far: ~A scoring ~A" best-weights best-mean))))
+
+;; use spsa to maximize win count against opponent when using the evaluation
+;; function in a 1-ply minimax search
+(defun learn-feature-weights (opponent initial-weights)
+  (let* ((nsteps 1000)
+         (nsamples 30))
+    (labels ((make-player (weights)
+               (lambda (state)
+                 (evaluation-decision state :evaluator (make-learned-evaluator weights) :verbose nil)))
+             (performance (weights)
+               (multiple-value-bind (mean stdev)
+                   (measure-performance (make-player weights) opponent nsamples)
+                 (print (list weights mean stdev))
+                 (values mean stdev)))
+             (goodness (weights)
+               (+ (* 0.1 (vector-norm weights :l 1))
+                  (* 0.2 (vector-norm weights :l 2))
+                  (* 0.9 (- (performance weights))))))
+      (multiple-value-bind (initial-mean initial-stdev) (performance initial-weights)
+        (format t "initial performance ~D (±~D)~%" initial-mean initial-stdev)
+        (let ((final-weights (spsa nsteps #'goodness initial-weights :c (+ initial-stdev 1e-3))))
+          (multiple-value-bind (final-mean final-stdev) (performance final-weights)
+            (fresh-line)
+            (format t "optimized performance from ~D (±~D) to ~D (±~D)~%"
+                    initial-mean initial-stdev final-mean final-stdev)
+            final-weights))))))
+
+(defun learn-feature-weights-against-mcts ()
+  (let* ((k (second (array-dimensions *featuremap-map*)))
+         (initial-weights (make-sequence '(vector single-float) k :initial-element (/ 1.0 k)))
+         (mcts-player (lambda (state) (mcts-decision state :max-sample-size 100 :verbose nil))))
+    (learn-feature-weights mcts-player initial-weights)))
+

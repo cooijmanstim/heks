@@ -114,6 +114,9 @@
 (defun vector-minus (u v &optional (result-type (type-of u)))
   (map result-type #'- u v))
 
+(defun vector-times (u v &optional (result-type (type-of u)))
+  (map result-type #'* u v))
+
 (defun scale-vector (scalar vector &optional (result-type (type-of vector)))
   (map result-type (lambda (x) (* scalar x)) vector))
 
@@ -121,6 +124,12 @@
   (expt (iter (for x in-vector vector)
               (sum (expt (abs x) l)))
         (/ 1 l)))
+
+(defun dot-product (us vs)
+  (assert (length= us vs))
+  (iter (for u in-vector us)
+        (for v in-vector vs)
+        (summing (* u v))))
 
 (defun matrix (initial-contents)
   (when-let ((m (length initial-contents))
