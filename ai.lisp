@@ -76,15 +76,18 @@
           (incf ,n)))
 
 (defun measure-branching-factor (branching-factor)
-  (with-slots ((mean mean-branching-factor) (n branching-factor-sample-size)) *minimax-statistics*
-    (update-running-average mean n branching-factor)))
+  (when *minimax-statistics*
+    (with-slots ((mean mean-branching-factor) (n branching-factor-sample-size)) *minimax-statistics*
+      (update-running-average mean n branching-factor))))
 
 (defun measure-moves (moves)
-  (with-slots ((mean mean-move-count) (n move-count-sample-size)) *minimax-statistics*
-    (update-running-average mean n (length moves))))
+  (when *minimax-statistics*
+    (with-slots ((mean mean-move-count) (n move-count-sample-size)) *minimax-statistics*
+      (update-running-average mean n (length moves)))))
 
 (defun measure-node ()
-  (incf (minimax-statistics-node-count *minimax-statistics*)))
+  (when *minimax-statistics*
+    (incf (minimax-statistics-node-count *minimax-statistics*))))
 
 ;; depth counts down as we recurse, ply counts up. transposition lookup depends on depth
 ;; (of the subtree it summarizes) whereas killer move lookup depends on ply.
@@ -139,24 +142,43 @@
       (measure-moves moves)
       (setf moves (order-moves depth ply state moves))
       (iter (for move in moves)
-            (for branching-factor from 1)
+            (with branching-factor = 0)
             (for breadcrumb = (apply-move state move))
             (with principal-variation = '())
             (with principal-value = *evaluation-minimum*)
             (declare (fixnum branching-factor)
                      (evaluation principal-value))
-            (multiple-value-bind (current-value current-variation)
-                (minimax state
-                         (the fixnum (1- depth))
-                         (the fixnum (1+ ply))
-                         evaluator
-                         (evaluation-inverse beta)
-                         (evaluation-inverse alpha))
-              (declare (evaluation current-value))
-              (setf current-value (evaluation-inverse current-value))
-              (if (> current-value principal-value)
-                  (setf principal-variation (cons move current-variation)
-                        principal-value current-value)))
+            (labels ((worse-than-principal ()
+                       ;; PVS/Negascout
+                       (let* ((pvs-alpha (max principal-value alpha))
+                              (pvs-beta (1+ alpha))
+                              (*minimax-statistics* nil)
+                              (result (evaluation-inverse
+                                       (minimax state
+                                                (the fixnum (1- depth))
+                                                (the fixnum (1+ ply))
+                                                evaluator
+                                                (evaluation-inverse pvs-beta)
+                                                (evaluation-inverse pvs-alpha)))))
+                         (declare (evaluation pvs-alpha pvs-beta result))
+                         (or (< result pvs-beta) (<= beta result))))
+                     (expand ()
+                       (incf branching-factor)
+                       (multiple-value-bind (current-value current-variation)
+                           (minimax state
+                                    (the fixnum (1- depth))
+                                    (the fixnum (1+ ply))
+                                    evaluator
+                                    (evaluation-inverse beta)
+                                    (evaluation-inverse alpha))
+                         (declare (evaluation current-value))
+                         (setf current-value (evaluation-inverse current-value))
+                         (when (> current-value principal-value)
+                           (setf principal-variation (cons move current-variation)
+                                 principal-value current-value)))))
+              (unless (and principal-variation
+                           (worse-than-principal))
+                (expand)))
             (unapply-move state breadcrumb)
             (maxf alpha principal-value)
             (when (>= alpha beta)
