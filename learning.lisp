@@ -12,7 +12,7 @@
 (defun state->vector (state)
   (with-slots (board (self player)) state
     ;; FIXME: magic numbers
-    (let* ((vector (make-array (* 4 61) :element-type 'bit :fill-pointer 0))
+    (let* ((vector (make-array (* 4 61) :element-type 'single-float :fill-pointer 0 :adjustable t))
            (opponent (opponent self)))
       (iter (for signified-object in '(:man :king))
             (iter (for signified-owner in (list self opponent))
@@ -20,8 +20,8 @@
                         (with-slots (object owner) tile
                           (vector-push (if (and (eq object signified-object)
                                                 (eq owner  signified-owner))
-                                           1
-                                           0)
+                                           1.0
+                                           0.0)
                                        vector)))))
       vector)))
 
@@ -127,7 +127,7 @@
           (print (list k theta)))
     (values theta thetas)))
 
-;; performs moves randomly, calling fn with the state every now and then
+;; perform moves according to a fast mcts decision, calling fn with the state every now and then
 (defun generate-states (n fn)
   (let ((observation-rate 0.05))
     (iter (with state = (make-initial-state))
@@ -136,27 +136,27 @@
           (when (null moves)
             (setf state (make-initial-state))
             (next-iteration))
-          (apply-move state (random-elt moves))
           (when (< (random 1.0) observation-rate)
             (funcall fn state)
-            (decf n)))))
+            (decf n))
+          (apply-move state (random-elt moves)))))
 
 (defun generate-mcts-evaluated-state-vectors (n mcts-sample-budget fn)
   (generate-states n
                    (lambda (state)
                      (multiple-value-bind (move move-value state-value)
                          (mcts-decision state :max-sample-size mcts-sample-budget)
-                       (declare (ignore move move-value))
+                       (declare (ignore move state-value))
                        (let ((state-vector (state->vector state)))
-                         (vector-push-extend state-value state-vector)
+                         (vector-push-extend move-value state-vector)
                          (funcall fn state-vector))))))
 
 (defun dump-mcts-evaluated-state-vectors (n mcts-sample-budget file-name)
-  (with-output-to-file (stream file-name)
-    (generate-mcts-evaluated-state-vectors
-     n mcts-sample-budget
-     (lambda (state-vector)
-       (format-vector stream state-vector)))))
+  (with-output-to-file (stream file-name :if-exists :overwrite :if-does-not-exist :create)
+      (generate-mcts-evaluated-state-vectors
+       n mcts-sample-budget
+       (lambda (state-vector)
+         (format-vector stream state-vector)))))
 
 (defun random-search-feature-weights (opponent)
   (iter (with nsamples = 30)

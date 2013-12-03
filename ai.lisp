@@ -231,11 +231,9 @@
 (defun mcts-update (node winner)
   (with-slots (last-player nvisits nwins) node
     (incf nvisits)
-    (incf nwins (if (null winner)
-                    1/2
-                    (if (eq winner last-player)
-                        1
-                        0)))))
+    (incf nwins (if (eq winner last-player)
+                    1
+                    0))))
 
 (defparameter *mcts-maximum-depth* 200)
 (defun mcts-decision (root-state &key (max-sample-size most-positive-fixnum) (verbose t))
@@ -258,9 +256,6 @@
                (iter (for moves = (moves state))
                      (for depth from 0)
                      (until (emptyp moves))
-                     ;; no winner
-                     (when (> depth *mcts-maximum-depth*)
-                       (return-from rollout nil))
                      (apply-move state (random-elt moves)))
                (state-winner state))
              (backprop (node winner)

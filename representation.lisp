@@ -157,20 +157,22 @@
                    (board (make-initial-board))
                    (player :white)
                    (hash (logxor (zobrist-hash-board board)
-                                 (zobrist-hash-player player))))
+                                 (zobrist-hash-player player)))
+                   (endp nil))
   (let ((state (make-instance 'state)))
-    (with-slots ((b board) (p player) (h hash)) state
+    (with-slots ((b board) (p player) (h hash) (e endp)) state
       (setf b board
             p player
-            h hash))
+            h hash
+            e endp))
     state))
 
 (defun make-initial-state ()
   (make-state))
 
 (defun copy-state (state)
-  (with-slots (board player hash) state
-    (make-state (copy-board board) player hash)))
+  (with-slots (board player hash endp) state
+    (make-state (copy-board board) player hash endp)))
 
 (defun state-equal (a b)
   (and (eq (state-player a) (state-player b))
