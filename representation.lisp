@@ -6,6 +6,7 @@
 (deftype player ()
   '(member :white :black))
 
+;; TODO: low-hanging optimization fruit here
 (defun player-forward-directions (player)
   (ccase player
     (:white (mapcar #'list->v '((0  1) ( 1 0) ( 1  1))))

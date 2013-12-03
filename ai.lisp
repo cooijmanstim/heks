@@ -59,6 +59,11 @@
   (append (when-let ((transposition (lookup-transposition state)))
             (list (transposition-move transposition)))
           (lookup-killers ply moves)
+          ;; move a few random moves forward to get nondeterminism
+          ;; alternatively, add a bit of noise to the evaluation function
+          (list (random-elt moves)
+                (random-elt moves)
+                (random-elt moves))
           moves))
 
 (defstruct minimax-statistics
