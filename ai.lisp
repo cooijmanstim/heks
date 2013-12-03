@@ -56,8 +56,9 @@
 (defun order-moves (depth ply state moves)
   ;; use transposition move regardless of depth
   (declare (ignore depth))
-  (append (when-let ((transposition (lookup-transposition state)))
-            (list (transposition-move transposition)))
+  (append (when-let* ((transposition (lookup-transposition state))
+                      (move (transposition-move transposition)))
+            (list move))
           (lookup-killers ply moves)
           ;; move a few random moves forward to get nondeterminism
           ;; alternatively, add a bit of noise to the evaluation function
@@ -108,7 +109,7 @@
 (defun minimax (state depth ply evaluator
                 &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
                 &aux (original-alpha alpha))
-  (declare (optimize (speed 3) (safety 0))
+  (declare (optimize (debug 3) (safety 1))
            (fixnum depth ply)
            (evaluation alpha beta)
            (type (function * fixnum) evaluator))
@@ -205,6 +206,11 @@
              (return (values principal-value principal-variation)))))))
 
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state) (verbose t))
+  (let ((moves (moves (copy-state state))))
+    (when (= (length moves) 1)
+      (funcall updater (first moves))
+      (funcall committer)
+      (return-from minimax-decision (first moves))))
   ;; use a fresh table with every top-level search
   (let (value
         variation
@@ -214,10 +220,12 @@
         (state (copy-state state)))
     (catch :out-of-time
       (iter (for max-depth from 0 below *minimax-maximum-depth*)
-            (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
-            (print (list max-depth value variation))
-            (unless *out-of-time* ;; this *could* happen...
-              (funcall updater (first variation)))))
+            (unwind-protect
+                 (progn
+                   (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
+                   (print (list max-depth value variation)))
+              (unless *out-of-time*
+                (funcall updater (first variation))))))
     (funcall committer)
     (let ((table-statistics
            (list :ply-nkillers (map 'vector #'length *killer-table*))))
@@ -228,7 +236,7 @@
 (defun evaluation-decision (state &key (evaluator #'evaluate-state) (verbose t))
   (iter (for move in (moves state))
         (for breadcrumb = (apply-move state move))
-        (finding move maximizing (funcall evaluator state (moves state))
+        (finding move maximizing (evaluation-inverse (funcall evaluator state (moves state)))
                  into (best-move value))
         (unapply-move state breadcrumb)
         (finally

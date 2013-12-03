@@ -51,6 +51,10 @@
                  (update-move (mcts-decision state))
                  (setq computer-deciding nil)
                  (commit-move))
+               (evaluation-move ()
+                 (update-move (evaluation-decision state))
+                 (setq computer-deciding nil)
+                 (commit-move))
                (computer-move (algorithm)
                  (setq computer-deciding t)
                  (redraw)
@@ -58,7 +62,8 @@
                   (lambda ()
                     (time-limited 10 (ccase algorithm
                                        (:minimax #'minimax-move)
-                                       (:mcts #'mcts-move))))
+                                       (:mcts #'mcts-move)
+                                       (:evaluation #'evaluation-move))))
                   :name "worker thread")))
         (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
         (fresh-move)
@@ -84,7 +89,10 @@
                     (computer-move :minimax)))
                  ((sdl:key= key :sdl-key-f2)
                   (unless computer-deciding
-                    (computer-move :mcts)))))
+                    (computer-move :mcts)))
+                 ((sdl:key= key :sdl-key-f3)
+                  (unless computer-deciding
+                    (computer-move :evaluation)))))
           (:mouse-button-up-event
            (:button button :x x :y y)
           (cond ((= button sdl:sdl-button-left)

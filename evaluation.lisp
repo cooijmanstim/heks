@@ -52,9 +52,12 @@
      (- (+ men-ours   (* king-value kings-ours))
         (+ men-theirs (* king-value kings-theirs)))
      ;; difference in average capturability of men
-     (* 0.25 (- (/ capturability-theirs men-theirs)
-                (/ capturability-ours   men-ours))))))
-      
+     (* 0.25 (- (if (zerop men-theirs)
+                    0
+                    (/ capturability-theirs men-theirs))
+                (if (zerop men-ours)
+                    0
+                    (/ capturability-ours   men-ours)))))))
 
 (declaim (ftype (function * evaluation) heuristic-evaluation evaluate-state))
 
