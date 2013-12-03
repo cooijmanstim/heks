@@ -63,26 +63,35 @@
 
 (defstruct minimax-statistics
   (mean-branching-factor 0.0 :type single-float)
-  (branching-factor-sample-size 0 :type integer)
+  (branching-factor-sample-size 0 :type fixnum)
   (mean-move-count 0.0 :type single-float)
-  (move-count-sample-size 0 :type integer)
-  (node-count 0 :type integer))
+  (move-count-sample-size 0 :type fixnum)
+  (node-count 0 :type fixnum))
 (defparameter *minimax-statistics* nil)
 
 ;; XXX: mean and n are places that are evaluated more than once
 (defmacro update-running-average (mean n newvalue)
-  `(progn (setf ,mean (+ (* (/ ,n (1+ ,n)) ,mean)
-                         (* (/  1 (1+ ,n)) ,newvalue)))
-          (incf ,n)))
+  `(progn
+     (setf ,mean (+ (* (/ ,n (+ 1.0 ,n)) ,mean)
+                    (* (/  1 (+ 1.0 ,n)) ,newvalue)))
+     (incf ,n)))
 
+(declaim (inline measure-branching-factor
+                 measure-moves
+                 measure-node))
 (defun measure-branching-factor (branching-factor)
   (when *minimax-statistics*
     (with-slots ((mean mean-branching-factor) (n branching-factor-sample-size)) *minimax-statistics*
+      (declare (fixnum n branching-factor)
+               (single-float mean))
       (update-running-average mean n branching-factor))))
 
 (defun measure-moves (moves)
   (when *minimax-statistics*
     (with-slots ((mean mean-move-count) (n move-count-sample-size)) *minimax-statistics*
+      (declare (fixnum n)
+               (single-float mean)
+               (list moves))
       (update-running-average mean n (length moves)))))
 
 (defun measure-node ()
