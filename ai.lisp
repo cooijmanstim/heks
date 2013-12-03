@@ -160,40 +160,41 @@
             (for breadcrumb = (apply-move state move))
             (with principal-variation = '())
             (with principal-value = *evaluation-minimum*)
+            (with current-variation = '())
+            (with current-value = *evaluation-minimum*)
             (declare (fixnum branching-factor)
-                     (evaluation principal-value))
-            (labels ((worse-than-principal ()
+                     (evaluation principal-value current-value))
+            (labels ((at-least-as-good ()
                        ;; PVS/Negascout
                        (let* ((pvs-alpha (max principal-value alpha))
                               (pvs-beta (1+ alpha))
-                              (*minimax-statistics* nil)
-                              (result (evaluation-inverse
-                                       (minimax state
-                                                (the fixnum (1- depth))
-                                                (the fixnum (1+ ply))
-                                                evaluator
-                                                (evaluation-inverse pvs-beta)
-                                                (evaluation-inverse pvs-alpha)))))
-                         (declare (evaluation pvs-alpha pvs-beta result))
-                         (or (< result pvs-beta) (<= beta result))))
+                              (*minimax-statistics* nil))
+                         (declare (evaluation pvs-alpha pvs-beta))
+                         (setf current-value (evaluation-inverse
+                                              (minimax state
+                                                       (the fixnum (1- depth))
+                                                       (the fixnum (1+ ply))
+                                                       evaluator
+                                                       (evaluation-inverse pvs-beta)
+                                                       (evaluation-inverse pvs-alpha))))
+                         (and (<= pvs-beta current-value) (< current-value beta))))
                      (expand ()
                        (incf branching-factor)
-                       (multiple-value-bind (current-value current-variation)
-                           (minimax state
-                                    (the fixnum (1- depth))
-                                    (the fixnum (1+ ply))
-                                    evaluator
-                                    (evaluation-inverse beta)
-                                    (evaluation-inverse alpha))
-                         (declare (evaluation current-value))
-                         (setf current-value (evaluation-inverse current-value))
-                         (when (> current-value principal-value)
-                           (setf principal-variation (cons move current-variation)
-                                 principal-value current-value)))))
-              (unless (and principal-variation
-                           (worse-than-principal))
-                (expand)))
+                       (multiple-value-setq (current-value current-variation)
+                         (minimax state
+                                  (the fixnum (1- depth))
+                                  (the fixnum (1+ ply))
+                                  evaluator
+                                  (evaluation-inverse beta)
+                                  (evaluation-inverse alpha)))
+                       (setf current-value (evaluation-inverse current-value))))
+              (if-first-time (expand)
+                             (when (at-least-as-good)
+                               (expand))))
             (unapply-move state breadcrumb)
+            (when (> current-value principal-value)
+              (setf principal-variation (cons move current-variation)
+                    principal-value current-value))
             (maxf alpha principal-value)
             (when (>= alpha beta)
               (store-killer ply move)
