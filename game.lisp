@@ -260,13 +260,13 @@
 (defun apply-move (state move)
   (declare (optimize (speed 3) (safety 0)))
   (with-slots (board player endp) state
-    (assert (and move (not (state-endp state))))
+    (assert (and move (not (state-endp state))) (move state))
     (let* ((initial-tile (board-tile board (the v (car move))))
            (moving-object (tile-object initial-tile))
            (can-fly (can-fly moving-object))
            (capture-points '()))
-      (assert (eq player (tile-owner initial-tile)))
-      (assert (member moving-object '(:man :king)))
+      (assert (eq player (tile-owner initial-tile)) (move state))
+      (assert (member moving-object '(:man :king)) (move state))
       ;; trace the path to figure out what's captured. might as well
       ;; do some validity checking. the checks here are safety nets
       ;; rather than guarantees. men's backward movement is not prevented,
@@ -277,9 +277,9 @@
         (multiple-value-bind (didj n)
             (displacement-direction (car prev-ij-cons)
                                     (car next-ij-cons))
-          (assert (member didj *all-directions* :test #'v=))
+          (assert (member didj *all-directions* :test #'v=) (move state))
           ;; the only condition on the last tile is that it is empty
-          (assert (eq :empty (tile-object (board-tile board (car next-ij-cons)))))
+          (assert (eq :empty (tile-object (board-tile board (car next-ij-cons)))) (move state))
           ;; conditions on the rest of the tiles
           (let (capture-point)
             (do ((k 1 (1+ k))
@@ -290,9 +290,9 @@
               (with-slots (object owner) (board-tile board ij)
                 (ccase object
                   (:empty
-                   (assert can-fly))
+                   (assert can-fly (move state)))
                   ((:man :king)
-                   (assert (not (or capture-point (eq owner player))))
+                   (assert (not (or capture-point (eq owner player))) (move state))
                    (setq capture-point ij)))))
             (when capture-point
               (push capture-point capture-points)))))
