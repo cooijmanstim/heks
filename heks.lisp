@@ -15,7 +15,9 @@
                  (setf submove '())
                  (setq all-moves (moves state)
                        supermoves (supermoves submove all-moves))
-                 (redraw))
+                 (redraw)
+                 (fresh-line)
+                 (format t "state evaluation: ~A" (evaluate-state state all-moves)))
                (update-move (new-submove)
                  (print (list :update-move new-submove))
                  (let ((new-supermoves (supermoves new-submove all-moves)))
@@ -92,7 +94,9 @@
                     (computer-move :mcts)))
                  ((sdl:key= key :sdl-key-f3)
                   (unless computer-deciding
-                    (computer-move :evaluation)))))
+                    (computer-move :evaluation)))
+                 ((sdl:key= key :sdl-key-f12)
+                  (break))))
           (:mouse-button-up-event
            (:button button :x x :y y)
           (cond ((= button sdl:sdl-button-left)

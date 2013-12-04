@@ -2,17 +2,25 @@
 
 (declaim (optimize (debug 3) (safety 3)))
 
-(deftype evaluation () 'single-float)
-
-(defparameter *evaluation-maximum* (min (abs most-negative-single-float) (abs most-positive-single-float)))
-(defparameter *evaluation-minimum* (- *evaluation-maximum*))
-(declaim (evaluation *evaluation-maximum* *evaluation-minimum*))
+(deftype evaluation () 'fixnum)
+(defparameter *evaluation-granularity* 16) ; on both sides of zero
+(defparameter *evaluation-minimum* (- *evaluation-granularity*))
+(defparameter *evaluation-maximum* *evaluation-granularity*)
+(declaim (evaluation *evaluation-minimum* *evaluation-maximum*))
 
 (defun evaluation-inverse (v)
-  (- v))
+  (+ *evaluation-minimum*
+     (- *evaluation-maximum*
+        v)))
 
-(declaim (ftype (function (*) fixnum) piece-value))
+(defun granularize (x)
+  (declare (single-float x))
+  ;; scale x because x/(1+|x|) saturates too early
+  (let ((x (/ x 8)))
+    (round (* *evaluation-granularity*
+              (/ x (1+ (abs x)))))))
 
+(declaim (ftype (function (state) single-float) heuristic-evaluation))
 (defun heuristic-evaluation (state)
   (let ((king-value    3)
         (men-ours      0)
@@ -52,16 +60,15 @@
      (- (+ men-ours   (* king-value kings-ours))
         (+ men-theirs (* king-value kings-theirs)))
      ;; difference in average capturability of men
-     (* 0.25 (- (if (zerop men-theirs)
-                    0
-                    (/ capturability-theirs men-theirs))
-                (if (zerop men-ours)
-                    0
-                    (/ capturability-ours   men-ours)))))))
+     (* 0.5 (- (if (zerop men-theirs)
+                   0
+                   (/ capturability-theirs men-theirs))
+               (if (zerop men-ours)
+                   0
+                   (/ capturability-ours   men-ours)))))))
 
-(declaim (ftype (function * evaluation) heuristic-evaluation evaluate-state))
-
+(declaim (ftype (function (state list) evaluation) evaluate-state))
 (defun evaluate-state (state moves)
   (if (null moves)
       *evaluation-minimum* ;; no moves, player loses
-      (heuristic-evaluation state)))
+      (granularize (heuristic-evaluation state))))
