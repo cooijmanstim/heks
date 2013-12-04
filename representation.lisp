@@ -25,16 +25,17 @@
 
 
 ; XXX: it is assumed that owner is non-nil iff object is :man or :king
-(defstruct (tile (:constructor make-tile (object &optional owner)) (:copier nil))
+(defstruct (tile (:copier nil))
   (object :void :type (member :void     ; the tile is not part of the board (necessary
                                         ; because we're cramming a hexagonal board into
                                         ; a rectangular array
                               :empty    ; there is nothing on the tile
                               :man :king))
-  (owner nil :type (or nil player)))
+  (owner nil :type (or null player)))
 
 (defun copy-tile (tile)
-  (make-tile (tile-object tile) (tile-owner tile)))
+  (with-slots (object owner) tile
+    (make-tile :object object :owner owner)))
 
 (defun tile-equal (a b)
   (and (eq (tile-object a) (tile-object b))
@@ -103,10 +104,10 @@
     (cond ((or (< (s1 ij) 0) (< (s2 ij) 0)
                (< (s1 kl) 0) (< (s2 kl) 0)
                (<= (+ (s2 kl) (s1 ij)) 3)
-               (<= (+ (s1 kl) (s2 ij)) 3)) (make-tile :void))
-          ((absv<=s ij 3) (make-tile :man :white))
-          ((absv<=s kl 3) (make-tile :man :black))
-          (t (make-tile :empty)))))
+               (<= (+ (s1 kl) (s2 ij)) 3)) (make-tile :object :void))
+          ((absv<=s ij 3) (make-tile :object :man :owner :white))
+          ((absv<=s kl 3) (make-tile :object :man :owner :black))
+          (t (make-tile :object :empty)))))
 
 (defun crown-p (tile ij)
   (with-slots (object owner) tile
@@ -120,7 +121,7 @@
 (defun make-initial-board ()
   (let ((board (make-array (v->list *board-dimensions*)
                            :element-type 'tile
-                           :initial-element (make-tile :void))))
+                           :initial-element (make-tile :object :void))))
     (iter (for i from 1 below (- (s1 *board-dimensions*) 1))
           (iter (for j from 1 below (- (s2 *board-dimensions*) 1))
                 (for ij = (v i j))
@@ -130,7 +131,7 @@
 (defun make-empty-board ()
   (let ((board (make-initial-board)))
     (iter (for tile at ij of board)
-          (setf (board-tile board ij) (make-tile :empty)))
+          (setf (board-tile board ij) (make-tile :object :empty)))
     board))
 
 (defun copy-board (board)
@@ -150,32 +151,26 @@
                (always (tile-equal (board-tile board1 ij)
                                    (board-tile board2 ij)))))))
 
-(defstruct (state (:constructor nil) (:copier nil))
-  (board nil :type (or null board))
+(defstruct (state (:copier nil))
+  (board nil :type board)
   (player :white :type player)
   (endp nil :type boolean)
   (hash 0 :type zobrist-hash))
 
-(defun make-state (&optional
-                   (board (make-initial-board))
-                   (player :white)
-                   (hash (logxor (zobrist-hash-board board)
-                                 (zobrist-hash-player player)))
-                   (endp nil))
-  (let ((state (make-instance 'state)))
-    (with-slots ((b board) (p player) (h hash) (e endp)) state
-      (setf b board
-            p player
-            h hash
-            e endp))
-    state))
-
 (defun make-initial-state ()
-  (make-state))
+  (let ((board (make-initial-board)))
+    (make-state :board board
+                :player :white
+                :hash (logxor (zobrist-hash-board board)
+                              (zobrist-hash-player :white))
+                :endp nil)))
 
 (defun copy-state (state)
   (with-slots (board player hash endp) state
-    (make-state (copy-board board) player hash endp)))
+    (make-state :board (copy-board board)
+                :player player
+                :hash hash
+                :endp endp)))
 
 (defun state-equal (a b)
   (and (eq (state-player a) (state-player b))

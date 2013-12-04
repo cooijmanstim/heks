@@ -22,7 +22,7 @@
   (declare (v ij))
   (prog1
       (board-tile board ij)
-    (setf (board-tile board ij) (make-tile :empty))))
+    (setf (board-tile board ij) (make-tile :object :empty))))
 
 ;; turn a man into a king when he is Ready
 (defun maybe-crown* (tile ij)
