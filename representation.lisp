@@ -6,11 +6,11 @@
 (deftype player ()
   '(member :white :black))
 
-;; TODO: low-hanging optimization fruit here
+(declaim (inline player-forward-directions opponent can-fly))
 (defun player-forward-directions (player)
   (ccase player
-    (:white (mapcar #'list->v '((0  1) ( 1 0) ( 1  1))))
-    (:black (mapcar #'list->v '((0 -1) (-1 0) (-1 -1))))))
+    (:white (list (v 0  1) (v  1 0) (v  1  1)))
+    (:black (list (v 0 -1) (v -1 0) (v -1 -1)))))
 
 (defun opponent (player)
   (ccase player
@@ -40,6 +40,7 @@
   (and (eq (tile-object a) (tile-object b))
        (eq (tile-owner  a) (tile-owner  b))))
 
+(declaim (inline tile-empty-p))
 (defun tile-empty-p (board ij)
   (eq (tile-object (board-tile board ij)) :empty))
 
@@ -54,7 +55,7 @@
 (defparameter *board-dimensions* (v *board-size* *board-size*))
 (defparameter *board-center* (scale-vector 1/2 (s+v -1 *board-dimensions*)))
 
-(declaim (inline board-tile set-board-tile))
+(declaim (inline board-tile set-board-tile board-rmi->ij))
 (defun board-tile (board ij)
   (declare (optimize (speed 3))
            (type board board))
@@ -65,6 +66,9 @@
            (type tile tile))
   (setf (aref board (s1 ij) (s2 ij)) tile))
 (defsetf board-tile set-board-tile)
+
+(defun board-rmi->ij (rmi)
+  (multiple-value-call #'v (truncate rmi *board-size*)))
 
 ;; iter clause for iterating over board interior
 ;; by default, iterates in the order a1, b1, ..., i1, b2, ... etc.  :void tiles are
@@ -84,11 +88,9 @@
                           (incf ,rmivar)
                           (when (>= ,rmivar ,maxrmivar)
                             (terminate))
-                          (list->v
-                           (array-index-row-major ,boardvar
-                                                  (if (eq ,playervar :black)
-                                                      (- ,maxrmivar ,rmivar 1)
-                                                      ,rmivar)))))
+                          (board-rmi->ij (if (eq ,playervar :black)
+                                             (- ,maxrmivar ,rmivar 1)
+                                             ,rmivar))))
          (,keyword ,tilevar next (board-tile ,boardvar ,ijvar))
          (when (eq (tile-object ,tilevar) :void)
            (next-iteration))))))

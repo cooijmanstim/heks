@@ -22,10 +22,11 @@
         (capturability-ours   0)
         (capturability-theirs 0))
     (with-slots ((us player) board) state
-      (declare (optimize (speed 3) (safety 1))
-               (fixnum men-ours kings-ours
-                       men-theirs kings-theirs
-                       capturability-ours capturability-theirs)
+      (declare (optimize (speed 3) (safety 0))
+               (fixnum
+                men-ours kings-ours
+                men-theirs kings-theirs
+                capturability-ours capturability-theirs)
                (board board))
       (macrolet ((count* (men kings capturability)
                    `(case object
@@ -34,9 +35,8 @@
                        (incf ,capturability
                              ;; number of axes along which the piece has empties on both sides
                              (iter (for direction in half-of-directions)
-                                   (counting (iter (for sign in '(-1 1))
-                                                   (for ij2 = (v+v ij (s*v sign direction)))
-                                                   (always (tile-empty-p board ij2)))))))
+                                   (counting (and (tile-empty-p board (v+v ij direction))
+                                                  (tile-empty-p board (v-v ij direction)))))))
                       (:king (incf ,kings)))))
         (iter (for tile at ij of board)
               (with them = (opponent us))

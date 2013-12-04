@@ -109,7 +109,7 @@
 (defun minimax (state depth ply evaluator
                 &optional (alpha *evaluation-minimum*) (beta *evaluation-maximum*)
                 &aux (original-alpha alpha))
-  (declare (optimize (debug 3) (safety 1))
+  (declare (optimize (speed 3) (safety 0))
            (fixnum depth ply)
            (evaluation alpha beta)
            (type (function * fixnum) evaluator))
