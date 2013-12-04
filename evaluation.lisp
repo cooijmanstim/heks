@@ -14,7 +14,8 @@
         v)))
 
 (defun granularize (x)
-  (declare (single-float x))
+  (declare (optimize (speed 3) (safety 1))
+           (single-float x))
   ;; scale x because x/(1+|x|) saturates too early
   (let ((x (/ x 8)))
     (round (* *evaluation-granularity*
@@ -22,7 +23,7 @@
 
 (declaim (ftype (function (state) single-float) heuristic-evaluation))
 (defun heuristic-evaluation (state)
-  (let ((king-value    3)
+  (let ((king-value    5)
         (men-ours      0)
         (kings-ours    0)
         (men-theirs    0)
@@ -42,9 +43,9 @@
                        (incf ,men)
                        (incf ,capturability
                              ;; number of axes along which the piece has empties on both sides
-                             (iter (for direction in half-of-directions)
-                                   (counting (and (tile-empty-p board (v+v ij direction))
-                                                  (tile-empty-p board (v-v ij direction)))))))
+                             (the fixnum (iter (for direction in half-of-directions)
+                                               (counting (and (tile-empty-p board (v+v ij direction))
+                                                              (tile-empty-p board (v-v ij direction))))))))
                       (:king (incf ,kings)))))
         (iter (for tile at ij of board)
               (with them = (opponent us))
@@ -60,12 +61,8 @@
      (- (+ men-ours   (* king-value kings-ours))
         (+ men-theirs (* king-value kings-theirs)))
      ;; difference in average capturability of men
-     (* 0.5 (- (if (zerop men-theirs)
-                   0
-                   (/ capturability-theirs men-theirs))
-               (if (zerop men-ours)
-                   0
-                   (/ capturability-ours   men-ours)))))))
+     (* 0.5 (- (if (zerop men-theirs) 0 (/ capturability-theirs men-theirs))
+               (if (zerop men-ours)   0 (/ capturability-ours   men-ours)))))))
 
 (declaim (ftype (function (state list) evaluation) evaluate-state))
 (defun evaluate-state (state moves)

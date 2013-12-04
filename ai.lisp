@@ -164,8 +164,8 @@
                   (current-value *evaluation-minimum*))
               (declare (fixnum branching-factor)
                        (evaluation current-value))
-              (labels ((expand ()
-                         (incf branching-factor)
+              (labels ((update-current (alpha beta)
+                         (declare (evaluation alpha beta))
                          (multiple-value-bind (subvalue subvariation)
                              (minimax state
                                       (the fixnum (1- depth))
@@ -173,8 +173,12 @@
                                       evaluator
                                       (evaluation-inverse beta)
                                       (evaluation-inverse alpha))
+                           (declare (evaluation subvalue))
                            (setf current-value (evaluation-inverse subvalue)
-                                 current-variation (cons move subvariation)))))
+                                 current-variation (cons move subvariation))))
+                       (expand ()
+                         (incf branching-factor)
+                         (update-current alpha beta)))
                 (if-first-time
                  (expand)
                  ;; PVS/Negascout
@@ -182,13 +186,7 @@
                         (pvs-beta (1+ pvs-alpha))
                         (*minimax-statistics* nil))
                    (declare (evaluation pvs-alpha pvs-beta))
-                   (setf current-value (evaluation-inverse
-                                        (minimax state
-                                                 (the fixnum (1- depth))
-                                                 (the fixnum (1+ ply))
-                                                 evaluator
-                                                 (evaluation-inverse pvs-beta)
-                                                 (evaluation-inverse pvs-alpha))))
+                   (update-current pvs-alpha pvs-beta)
                    ;; search properly if current value inaccurate
                    (when (and (<= pvs-beta current-value) (< current-value beta))
                      (expand)))))
