@@ -226,7 +226,7 @@
                (reduce #'nconc moves-lists))
               (t
                (setf endp t)
-               nil))))))
+               '()))))))
 
 (defun submovep (sub super)
   (iter (for a on sub)
