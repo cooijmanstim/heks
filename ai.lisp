@@ -159,7 +159,7 @@
       (iter (for move in moves)
             (with branching-factor = 0)
             (for breadcrumb = (apply-move state move))
-            (with principal-variation = '())
+            (with principal-variation = (first moves))
             (let ((current-variation '())
                   (current-value *evaluation-minimum*))
               (declare (fixnum branching-factor)

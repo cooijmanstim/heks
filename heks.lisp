@@ -100,11 +100,11 @@
           (:mouse-button-up-event
            (:button button :x x :y y)
           (cond ((= button sdl:sdl-button-left)
-                  (unless computer-deciding
-                    (update-move (append submove (list (board-position (v x y)))))))
-                 ((= button sdl:sdl-button-right)
-                  (unless computer-deciding
-                    (update-move (butlast submove 1))))))
+                 (unless computer-deciding
+                   (update-move (append submove (list (board-position (v x y)))))))
+                ((= button sdl:sdl-button-right)
+                 (unless computer-deciding
+                   (update-move (butlast submove 1))))))
           (:video-expose-event () (sdl:update-display)))))))
 
 

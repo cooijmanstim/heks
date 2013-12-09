@@ -51,29 +51,7 @@
             (assert (member move moves :test #'move-equal))
             (push (apply-move state move) breadcrumbs))
           (finally
-           (return (eq (state-player state) :black))))))
-
-(defun format-vector (stream v)
-  (fresh-line stream)
-  (iter (for elt in-vector v)
-        (format stream "~A " elt)))
-
-(defun load-array-from-file (file-name)
-  (with-open-file (stream file-name)
-    (iter (for line = (read-line stream nil nil))
-          (for row = (make-array 100 :element-type 'single-float :fill-pointer 0))
-          (while line)
-          (collecting (mapcar (lambda (string)
-                                ;; sigh.
-                                (coerce (read-from-string string) 'single-float))
-                              (cl-ppcre:all-matches-as-strings "\\S+" line))
-
-                      into rows)
-          (finally
-           (return (make-array (list (length rows) (length (first rows)))
-                               :element-type 'single-float
-                               :adjustable nil
-                               :initial-contents rows))))))
+           (return (eq (state-player state) *black-player*))))))
 
 ;; minimization through simultaneous perturbation stochastic approximation
 ;; returns final theta and a list of previous thetas, most recent first

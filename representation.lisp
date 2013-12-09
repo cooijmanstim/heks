@@ -2,21 +2,28 @@
 
 (declaim (optimize (debug 3)))
 
+(deftype player () '(integer 0 1))
+(defparameter *white-player* 0)
+(defparameter *black-player* 1)
+(declaim (player *white-player* *black-player*))
 
-(deftype player ()
-  '(member :white :black))
+(defun player-name (player)
+  (svref #("white" "black") player))
 
-(declaim (inline player-forward-directions opponent can-fly))
-(defun player-forward-directions (player)
-  (ccase player
-    (:white (list (v 0  1) (v  1 0) (v  1  1)))
-    (:black (list (v 0 -1) (v -1 0) (v -1 -1)))))
+(defparameter *forward-directions*
+  (vector (list (v 0  1) (v  1 0) (v  1  1))
+          (list (v 0 -1) (v -1 0) (v -1 -1))))
+(defparameter *all-directions*
+  (reduce #'append *forward-directions*))
+
+(declaim (inline opponent player-forward-directions can-fly)
+         (ftype (function (player) player) opponent))
 
 (defun opponent (player)
-  (ccase player
-    (:white :black)
-    (:black :white)))
+  (- 1 player))
 
+(defun player-forward-directions (player)
+  (svref *forward-directions* player))
 
 (defun can-fly (object)
   (ccase object
@@ -89,7 +96,7 @@
                           (incf ,rmivar)
                           (when (>= ,rmivar ,maxrmivar)
                             (terminate))
-                          (board-rmi->ij (if (eq ,playervar :black)
+                          (board-rmi->ij (if (eq ,playervar *black-player*)
                                              (- ,maxrmivar ,rmivar 1)
                                              ,rmivar))))
          (,keyword ,tilevar next (board-tile ,boardvar ,ijvar))
@@ -105,18 +112,23 @@
                (< (s1 kl) 0) (< (s2 kl) 0)
                (<= (+ (s2 kl) (s1 ij)) 3)
                (<= (+ (s1 kl) (s2 ij)) 3)) (make-tile :object :void))
-          ((absv<=s ij 3) (make-tile :object :man :owner :white))
-          ((absv<=s kl 3) (make-tile :object :man :owner :black))
+          ((absv<=s ij 3) (make-tile :object :man :owner *white-player*))
+          ((absv<=s kl 3) (make-tile :object :man :owner *black-player*))
           (t (make-tile :object :empty)))))
+
+(define-condition orphaned-object-error (error)
+  ((ij   :initarg :ij)
+   (tile :initarg :tile)))
 
 (defun crown-p (tile ij)
   (with-slots (object owner) tile
     (and (eq object :man)
-         (ccase owner
-           (:black (or (= (s1 ij) 1) (= (s2 ij) 1)))
-           (:white (or (= (s1 ij) (- *board-size* 2))
-                       (= (s2 ij) (- *board-size* 2))))))))
-
+         (let ((crowning-ordinate
+                (cond ((= owner *black-player*) 1)
+                      ((= owner *white-player*) (- *board-size* 2))
+                      (t (error 'orphaned-object-error :ij ij :tile tile)))))
+           (or (= (s1 ij) crowning-ordinate)
+               (= (s2 ij) crowning-ordinate))))))
 
 (defun make-initial-board ()
   (let ((board (make-array (v->list *board-dimensions*)
@@ -153,16 +165,16 @@
 
 (defstruct (state (:copier nil))
   (board nil :type board)
-  (player :white :type player)
+  (player *white-player* :type player)
   (endp nil :type boolean)
   (hash 0 :type zobrist-hash))
 
 (defun make-initial-state ()
   (let ((board (make-initial-board)))
     (make-state :board board
-                :player :white
+                :player *white-player*
                 :hash (logxor (zobrist-hash-board board)
-                              (zobrist-hash-player :white))
+                              (zobrist-hash-player *white-player*))
                 :endp nil)))
 
 (defun copy-state (state)
@@ -173,7 +185,7 @@
                 :endp endp)))
 
 (defun state-equal (a b)
-  (and (eq (state-player a) (state-player b))
+  (and (= (state-player a) (state-player b))
        (= (state-hash a) (state-hash b))
        (board-equal (state-board a) (state-board b))))
 

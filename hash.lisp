@@ -13,8 +13,7 @@
                                :element-type 'fixnum :initial-element 0))
         (board (make-initial-board))) ;; to make looping easier
     (iter (for tile at ij of board)
-          (iter (for player in '(:white :black))
-                (for k from 0)
+          (iter (for k in (list *white-player* *black-player*))
                 (iter (for object in '(:man :king))
                       (for l from 0)
                       (setf (aref positions (s1 ij) (s2 ij) k l) (zobrist-bitstring)))))
@@ -29,27 +28,24 @@
         0
         (aref *zobrist-bitstring-positions*
               (s1 ij) (s2 ij)
-              (ccase owner
-                (:white 0)
-                (:black 1))
+              owner
               (ccase object
                 (:man 0)
                 (:king 1))))))
 
+(defun zobrist-position-bitstring (tile ij)
+  (with-slots (object owner) tile
+    (if-let ((k owner)
+             (l (case object
+                  (:man 0)
+                  (:king 1)
+                (otherwise nil))))
+      (aref *zobrist-bitstring-positions* (s1 ij) (s2 ij) k l)
+      0)))
+
+;; used by toggle-player*
 (defun zobrist-player-bitstring ()
   *zobrist-bitstring-black-to-move*)
-
-(defun zobrist-position-bitstring (tile ij)
-  (if-let ((k (case (tile-owner tile)
-                (:white 0)
-                (:black 1)
-                (otherwise nil)))
-           (l (case (tile-object tile)
-                (:man 0)
-                (:king 1)
-                (otherwise nil))))
-    (aref *zobrist-bitstring-positions* (s1 ij) (s2 ij) k l)
-    0))
 
 (defun zobrist-hash-board (board)
   (let ((hash 0))
@@ -58,10 +54,9 @@
     hash))
 
 (defun zobrist-hash-player (player)
-  (if (eq player :black)
-      *zobrist-bitstring-black-to-move*
-      0))
+  (* player *zobrist-bitstring-black-to-move*))
 
 (defun zobrist-hash (state)
-  (logxor (zobrist-hash-board (state-board state))
-          (zobrist-hash-player (state-player state))))
+  (with-slots (board player) state
+    (logxor (zobrist-hash-board  board)
+            (zobrist-hash-player player))))

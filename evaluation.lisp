@@ -24,50 +24,62 @@
 
 (declaim (ftype (function (state) single-float) heuristic-evaluation))
 (defun heuristic-evaluation (state)
-  (let ((king-value    5)
-        (men-ours      0)
-        (kings-ours    0)
-        (men-theirs    0)
-        (kings-theirs  0)
-        (capturability-ours   0)
-        (capturability-theirs 0))
-    (with-slots ((us player) board) state
-      (declare (optimize (speed 3) (safety 0))
-               (fixnum
-                men-ours kings-ours
-                men-theirs kings-theirs
-                capturability-ours capturability-theirs)
-               (board board))
-      (macrolet ((count* (men kings capturability)
-                   `(case object
-                      (:man
-                       (incf ,men)
-                       (incf ,capturability
-                             ;; number of axes along which the piece has empties on both sides
-                             (the fixnum (iter (for direction in half-of-directions)
-                                               (counting (and (tile-empty-p board (v+v ij direction))
-                                                              (tile-empty-p board (v-v ij direction))))))))
-                      (:king (incf ,kings)))))
-        (iter (for tile at ij of board)
-              (with them = (opponent us))
-              (with half-of-directions = (player-forward-directions :white))
-              (with-slots (object owner) tile
-                (unless (eq object :empty)
-                  (cond ((eq owner us)
-                         (count* men-ours kings-ours capturability-ours))
-                        ((eq owner them)
-                         (count* men-theirs kings-theirs capturability-theirs))))))))
-    (+
-     ;; material advantage
-     (- (+ men-ours   (* king-value kings-ours))
-        (+ men-theirs (* king-value kings-theirs)))
-     ;; difference in average capturability of men
-     (* 0.5 (- (if (zerop men-theirs) 0 (/ capturability-theirs men-theirs))
-               (if (zerop men-ours)   0 (/ capturability-ours   men-ours)))))))
+  (let* ((king-value    5)
+         (men           (vector 0 0))
+         (kings         (vector 0 0))
+         (capturability (vector 0 0))
+         (us (state-player state))
+         (them (opponent us))
+         (board (state-board state)))
+    (declare (optimize (speed 3) (safety 1))
+             (board board))
+    (iter (for tile at ij of board)
+          (with-slots (object owner) tile
+            (case object
+              (:man (incf (svref men owner))
+                    (incf (svref capturability owner)
+                          ;; number of axes along which the piece has empties on both sides
+                          (the fixnum (iter (for direction in (player-forward-directions *white-player*))
+                                            (counting (and (tile-empty-p board (v+v ij direction))
+                                                           (tile-empty-p board (v-v ij direction))))))))
+              (:king (incf (svref kings owner))))))
+    (labels ((material-score (player)
+               (+ (svref men player) (* king-value (svref kings player))))
+             (average-capturability (player)
+               (if (zerop (svref men player))
+                   0
+                   (/ (svref capturability player) (svref men player)))))
+      (+
+       (* 1.0 (- (material-score us)
+                 (material-score them)))
+       (* 0.5 (- (average-capturability them)
+                 (average-capturability us)))))))
 
 (declaim (ftype (function (state list) evaluation) evaluate-state))
 (defun evaluate-state (state moves)
   (if (null moves)
       *evaluation-minimum* ;; no moves, player loses
       (granularize (heuristic-evaluation state))))
+
+
+
+;; TODO
+;(defstruct running-evaluation
+;  (men   #(0 0) :type simple-vector)
+;  (kings #(0 0) :type simple-vector))
+;
+;(defun update-running-evaluation (evaluation state breadcrumb)
+;  ;; NOTE: after last move, when state-player was opponent
+;  (with-slots (opponent) state
+;    (let ((player (opponent opponent)))
+;      (with-slots (men kings) evaluation
+;        (with-slots (capture-tiles crowned) breadcrumb
+;          (dolist (tile capture-tiles)
+;            (with-slots (object) tile
+;              (case object
+;                (:man  (decf (svref men   opponent)))
+;                (:king (decf (svref kings opponent))))))
+;          (when crowned
+;            (decf (svref men   player))
+;            (incf (svref kings player))))))))
 

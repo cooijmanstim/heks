@@ -15,8 +15,8 @@
 
 (defparameter *background-color* (sdl:color :r #x66 :g #x66 :b #x66))
 (defparameter *board-color*      (sdl:color :r #x88 :g #x88 :b #x88))
-(defparameter *piece-colors*     (list (cons :white (sdl:color :r #xcc :g #xcc :b #xcc))
-                                       (cons :black (sdl:color :r #x33 :g #x33 :b #x33))))
+(defparameter *piece-colors*     (vector (sdl:color :r #xcc :g #xcc :b #xcc)
+                                         (sdl:color :r #x33 :g #x33 :b #x33)))
 (defparameter *status-color*     (sdl:color :r #xaa :g #xaa :b #xaa))
 
 (defparameter *move-color* (sdl:color :r #x33 :g #x55 :b #x77))
@@ -75,7 +75,7 @@
       (let ((hexagon (iter (for x in *hexagon*)
                            (collect (vector->sdlpoint (vector-plus x dx)))))
             (center (vector->sdlpoint dx))
-            (piece-color (cdr (assoc owner *piece-colors*))))
+            (piece-color (svref *piece-colors* owner)))
         (sdl:draw-polygon hexagon :color *board-color* :aa t)
         (sdl:flood-fill center :surface *surface* :color *board-color*)
         ;; draw-filled-polygon refuses to work...
@@ -93,7 +93,7 @@
   (draw-board (state-board state))
   (draw-board-axes)
   (draw-status (format nil "~A to move~A"
-                       (state-player state)
+                       (player-name (state-player state))
                        (if minimax-deciding
                            "; thinking..."
                            ""))))
@@ -104,4 +104,3 @@
         (sdl:draw-filled-circle b *move-radius* :surface *surface* :color *move-color*)
         (unless (null a)
           (sdl:draw-line a b :surface *surface* :color *move-color* :aa t))))
-

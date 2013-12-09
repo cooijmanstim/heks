@@ -38,7 +38,8 @@
 
 ;; toggle whoever is to move
 (defun toggle-player* (state)
-  (setf (state-player state) (opponent (state-player state))))
+  (with-slots (player) state
+    (setf player (opponent player))))
 
 
 ;; like place-piece* with hash update
@@ -92,6 +93,9 @@
 
 ;;; MOVE GENERATION
 
+(define-condition invalid-displacement-error (error)
+  ((displacement :initarg :displacement)))
+
 (defun displacement-direction (ij ij2)
   (declare (optimize (speed 3) (safety 0))
            (v ij ij2))
@@ -100,13 +104,7 @@
     (cond ((= (s1 didj) 0) (values (v 0 (signum (s2 didj))) (the fixnum (abs (s2 didj)))))
           ((= (s2 didj) 0) (values (v (signum (s1 didj)) 0) (the fixnum (abs (s1 didj)))))
           ((= (s1 didj) (s2 didj)) (values (v (signum (s1 didj)) (signum (s2 didj))) (the fixnum (abs (s1 didj)))))
-          (t (assert nil)))))
-
-(defparameter *all-directions*
-  (mapcar #'list->v
-          '((-1  0) (0 -1)
-            ( 0  1) (1  0)
-            (-1 -1) (1  1))))
+          (t (error 'invalid-displacement-error :displacement didj)))))
 
 (defun moveset-equal (a b)
   (set-equal a b :test #'move-equal))
@@ -129,6 +127,7 @@
               (declare (v ij2))
               (when (tile-empty-p board ij2)
                 (push (list ij ij2) moves)))
+            ;; TODO v+v!
             (do ((ij2 (v+v ij didj) (v+v ij2 didj)))
                 ((not (tile-empty-p board ij2)))
               (declare (v ij2))
