@@ -24,7 +24,7 @@
 (defun net-load-arrays (kind)
   (iter (for i from 1 to 4)
         (collecting
-          (load-array-from-file (format nil "/home/tim/school/isg/3rbms_finetuned_log/~A~A" (string kind) i)))))
+          (load-array-from-file (format nil "/home/tim/school/isg/plain_net/~A~A" (string kind) i)))))
 
 (defparameter *net-weights* (net-load-arrays "W"))
 (defparameter *net-biases*  (mapcar #'array-as-vector (net-load-arrays "b")))
@@ -56,13 +56,13 @@
         (setf x (net-transfer x w b f))
         (finally
          (assert (= 1 (length x)))
-         (return (exp (min 0 (aref x 0)))))))
+         (return (exp (- (max 0 (aref x 0))))))))
 
 (defun net-evaluate-state (data state moves)
   (declare (optimize (speed 3) (safety 1))
            (ignore data moves))
-  (round (* *evaluation-granularity* (net-evaluate-state* state))))
+  ;; TODO: concentrate notches around 0.5?
+  (round (* 100 (- (* 2 (net-evaluate-state* state)) 1))))
 
-(defparameter *net-evaluator*
+(defun make-net-evaluator ()
   (make-evaluator :getter #'net-evaluate-state))
-

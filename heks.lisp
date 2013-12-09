@@ -38,7 +38,7 @@
                (undo-move ()
                  (unapply-move state (pop breadcrumbs))
                  (fresh-move))
-               (minimax-move ()
+               (minimax-move (&key (evaluator (make-material-evaluator)))
                  (minimax-decision state
                                    ;; XXX: this is not threadsafe, but we'll live with it.  the other
                                    ;; option would be to communicate the information to the event thread
@@ -48,7 +48,8 @@
                                               (update-move move))
                                    :committer (lambda ()
                                                 (setq computer-deciding nil)
-                                                (commit-move))))
+                                                (commit-move))
+                                   :evaluator evaluator))
                (mcts-move ()
                  (update-move (mcts-decision state))
                  (setq computer-deciding nil)
@@ -63,7 +64,15 @@
                  (sb-thread:make-thread
                   (lambda ()
                     (time-limited 10 (ccase algorithm
-                                       (:minimax #'minimax-move)
+                                       (:minimax-net
+                                        (lambda ()
+                                          (minimax-move :evaluator (make-net-evaluator))))
+                                       (:minimax-material
+                                        (lambda ()
+                                          (minimax-move :evaluator (make-material-evaluator))))
+                                       (:minimax-heuristic
+                                        (lambda ()
+                                          (minimax-move :evaluator (make-heuristic-evaluator))))
                                        (:mcts #'mcts-move)
                                        (:evaluation #'evaluation-move))))
                   :name "worker thread")))
@@ -88,11 +97,17 @@
                       (undo-move))))
                  ((sdl:key= key :sdl-key-f1)
                   (unless computer-deciding
-                    (computer-move :minimax)))
+                    (computer-move :minimax-material)))
                  ((sdl:key= key :sdl-key-f2)
                   (unless computer-deciding
-                    (computer-move :mcts)))
+                    (computer-move :minimax-heuristic)))
                  ((sdl:key= key :sdl-key-f3)
+                  (unless computer-deciding
+                    (computer-move :minimax-net)))
+                 ((sdl:key= key :sdl-key-f5)
+                  (unless computer-deciding
+                    (computer-move :mcts)))
+                 ((sdl:key= key :sdl-key-f9)
                   (unless computer-deciding
                     (computer-move :evaluation)))
                  ((sdl:key= key :sdl-key-f12)
