@@ -17,7 +17,7 @@
                        supermoves (supermoves submove all-moves))
                  (redraw)
                  (fresh-line)
-                 (format t "state evaluation: ~A" (evaluate-state state all-moves)))
+                 (format t "state evaluation: ~A" (evaluation? (make-slow-material-evaluator) state all-moves)))
                (update-move (new-submove)
                  (print (list :update-move new-submove))
                  (let ((new-supermoves (supermoves new-submove all-moves)))

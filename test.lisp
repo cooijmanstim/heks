@@ -251,6 +251,28 @@
                 (unapply-move state breadcrumb))
           (assert-equality #'state-equal state initial-state))))
 
+;; test the evaluator machinery by comparing the non-caching #'material-evaluation to
+;; the caching 'material-evaluator
+(define-test material-evaluator
+  (iter (repeat 10)
+        (with evaluator = (make-material-evaluator state))
+        (let* ((state (make-initial-state))
+               (breadcrumbs '())
+               (movess '()))
+          (evaluation* evaluator state)
+          (iter (repeat 20)
+                (for moves = (moves state))
+                (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))
+                (push moves movess)
+                (let ((breadcrumb (apply-move state (random-elt moves))))
+                  (push breadcrumb breadcrumbs)
+                  (evaluation+ evaluator state breadcrumb)))
+          (iter (for breadcrumb in breadcrumbs)
+                (for moves in movess)
+                (evaluation- evaluator state breadcrumb)
+                (unapply-move state breadcrumb)
+                (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))))))
+
 ;; commented out because verbose
 '(define-test spsa
   (labels ((f (x)

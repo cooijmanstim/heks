@@ -58,9 +58,11 @@
          (assert (= 1 (length x)))
          (return (exp (min 0 (aref x 0)))))))
 
-(defun net-evaluate-state (state moves)
-  (declare (optimize (speed 3) (safety 1)))
-  (if (null moves)
-      *evaluation-minimum*
-      (round (* *evaluation-granularity* (net-evaluate-state* state)))))
+(defun net-evaluate-state (data state moves)
+  (declare (optimize (speed 3) (safety 1))
+           (ignore data moves))
+  (round (* *evaluation-granularity* (net-evaluate-state* state))))
+
+(defparameter *net-evaluator*
+  (make-evaluator :getter #'net-evaluate-state))
 

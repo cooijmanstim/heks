@@ -111,8 +111,8 @@
                 &aux (original-alpha alpha))
   (declare (optimize (speed 3) (safety 0))
            (fixnum depth ply)
-           (evaluation alpha beta)
-           (type (function * fixnum) evaluator))
+           (evaluator evaluator)
+           (evaluation alpha beta))
   (when *out-of-time*
     (throw :out-of-time nil))
   (labels ((maybe-use-transposition ()
@@ -152,14 +152,15 @@
     ;; investigate the subtree
     (let ((moves (moves state)))
       (when (or (<= depth 0) (null moves))
-        (return-from minimax (values (funcall evaluator state moves) '())))
+        (return-from minimax (values (evaluation? evaluator state moves) '())))
       (measure-node)
       (measure-moves moves)
       (setf moves (order-moves depth ply state moves))
       (iter (for move in moves)
             (with branching-factor = 0)
             (for breadcrumb = (apply-move state move))
-            (with principal-variation = (first moves))
+            (with principal-variation = (list (first moves)))
+            (evaluation+ evaluator state breadcrumb)
             (let ((current-variation '())
                   (current-value *evaluation-minimum*))
               (declare (fixnum branching-factor)
@@ -190,6 +191,7 @@
                    ;; search properly if current value inaccurate
                    (when (and (<= pvs-beta current-value) (< current-value beta))
                      (expand)))))
+              (evaluation- evaluator state breadcrumb)
               (unapply-move state breadcrumb)
               (when (< alpha current-value)
                 (setf alpha current-value
@@ -204,7 +206,7 @@
                (break))
              (return (values alpha principal-variation)))))))
 
-(defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state) (verbose t))
+(defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator (make-material-evaluator)) (verbose t))
   (let ((moves (moves (copy-state state))))
     (when (= (length moves) 1)
       (funcall updater (first moves))
@@ -221,6 +223,7 @@
       (iter (for max-depth from 0 below *minimax-maximum-depth*)
             (unwind-protect
                  (progn
+                   (evaluation* evaluator state)
                    (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
                    (print (list max-depth value variation)))
               (unless *out-of-time*
@@ -232,11 +235,14 @@
         (print (list variation *minimax-statistics* table-statistics)))
       (values (first variation) value))))
 
-(defun evaluation-decision (state &key (evaluator #'evaluate-state) (verbose t))
+(defun evaluation-decision (state &key (evaluator (make-material-evaluator)) (verbose t))
+  (evaluation* evaluator state)
   (iter (for move in (moves state))
         (for breadcrumb = (apply-move state move))
-        (finding move maximizing (evaluation-inverse (funcall evaluator state (moves state)))
+        (evaluation+ evaluator state breadcrumb)
+        (finding move maximizing (evaluation-inverse (evaluation? evaluator state (moves state)))
                  into (best-move value))
+        (evaluation- evaluator state breadcrumb)
         (unapply-move state breadcrumb)
         (finally
          (when verbose

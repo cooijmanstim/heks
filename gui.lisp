@@ -75,7 +75,8 @@
       (let ((hexagon (iter (for x in *hexagon*)
                            (collect (vector->sdlpoint (vector-plus x dx)))))
             (center (vector->sdlpoint dx))
-            (piece-color (svref *piece-colors* owner)))
+            (piece-color (when owner
+                           (svref *piece-colors* owner))))
         (sdl:draw-polygon hexagon :color *board-color* :aa t)
         (sdl:flood-fill center :surface *surface* :color *board-color*)
         ;; draw-filled-polygon refuses to work...
