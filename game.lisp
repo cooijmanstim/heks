@@ -127,7 +127,6 @@
               (declare (v ij2))
               (when (tile-empty-p board ij2)
                 (push (list ij ij2) moves)))
-            ;; TODO v+v!
             (do ((ij2 (v+v ij didj) (v+v ij2 didj)))
                 ((not (tile-empty-p board ij2)))
               (declare (v ij2))

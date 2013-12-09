@@ -255,7 +255,7 @@
 ;; the caching 'material-evaluator
 (define-test material-evaluator
   (iter (repeat 10)
-        (with evaluator = (make-material-evaluator state))
+        (with evaluator = (make-material-evaluator))
         (let* ((state (make-initial-state))
                (breadcrumbs '())
                (movess '()))

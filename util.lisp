@@ -60,6 +60,10 @@
   (declare (fixnum x y))
   (make-array 2 :element-type 'fixnum :initial-contents (list x y)))
 
+(defun copy-v (v)
+  (declare (v v))
+  (copy-array v))
+
 (declaim (ftype (function (v) fixnum) s1 s2))
 (defun s1 (v)
   (declare (v v))
@@ -72,6 +76,11 @@
 (defun v+v (u v)
   (v (the fixnum (+ (s1 u) (s1 v)))
      (the fixnum (+ (s2 u) (s2 v)))))
+
+(defun v+v! (u v)
+  (incf (aref u 0) (aref v 0))
+  (incf (aref u 1) (aref v 1))
+  u)
 
 (defun v-v (u v)
   (v (the fixnum (- (s1 u) (s1 v)))
