@@ -6,7 +6,8 @@
 (defparameter *evaluation-granularity* 16) ; on both sides of zero
 (defparameter *evaluation-minimum* (- *evaluation-granularity*))
 (defparameter *evaluation-maximum* *evaluation-granularity*)
-(declaim (evaluation *evaluation-minimum* *evaluation-maximum*))
+(declaim (evaluation *evaluation-minimum* *evaluation-maximum*)
+         (fixnum *evaluation-granularity*))
 
 (defun evaluation-inverse (v)
   (+ *evaluation-minimum*
@@ -69,3 +70,4 @@
   (if (null moves)
       *evaluation-minimum* ;; no moves, player loses
       (granularize (heuristic-evaluation state))))
+

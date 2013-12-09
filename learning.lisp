@@ -53,11 +53,6 @@
           (finally
            (return (eq (state-player state) :black))))))
 
-(defun make-learned-evaluator (weights)
-  (lambda (state moves)
-    (declare (ignore moves))
-    (dot-product weights (features (state->vector state)))))
-
 (defun format-vector (stream v)
   (fresh-line stream)
   (iter (for elt in-vector v)
@@ -79,17 +74,6 @@
                                :element-type 'single-float
                                :adjustable nil
                                :initial-contents rows))))))
-
-(defparameter *featuremap-mean* (load-array-from-file "/home/tim/school/isg/pca_mean"))
-(defparameter *featuremap-map* (load-array-from-file "/home/tim/school/isg/pca_map"))
-
-(defun features (x)
-  (destructuring-bind (m n) (array-dimensions *featuremap-map*)
-    (iter (for j from 0 below n)
-          (collecting (iter (for i from 0 below m)
-                            (summing (* (aref *featuremap-map* i j)
-                                        (- (aref x i) (aref *featuremap-mean* 0 i)))))
-                      result-type (vector single-float)))))
 
 ;; minimization through simultaneous perturbation stochastic approximation
 ;; returns final theta and a list of previous thetas, most recent first
@@ -157,55 +141,4 @@
        n mcts-sample-budget
        (lambda (state-vector)
          (format-vector stream state-vector)))))
-
-(defun random-search-feature-weights (opponent)
-  (iter (with nsamples = 30)
-        (for n from 1)
-        (for weights = (map '(vector single-float)
-                            (lambda (i)
-                              (declare (ignore i))
-                              (coerce (gaussian-random) 'single-float))
-                            (iota (second (array-dimensions *featuremap-map*)))))
-        (multiple-value-bind (mean stdev)
-            (measure-performance 
-             (lambda (state)
-               (evaluation-decision state :evaluator (make-learned-evaluator weights) :verbose nil))
-             opponent nsamples)
-          (print (list weights mean stdev))
-          (finding weights maximizing mean into (best-weights best-mean)))
-        (when (= 0 (mod n 30))
-          (fresh-line)
-          (format t "best weights so far: ~A scoring ~A" best-weights best-mean))))
-
-;; use spsa to maximize win count against opponent when using the evaluation
-;; function in a 1-ply minimax search
-(defun learn-feature-weights (opponent initial-weights)
-  (let* ((nsteps 1000)
-         (nsamples 30))
-    (labels ((make-player (weights)
-               (lambda (state)
-                 (evaluation-decision state :evaluator (make-learned-evaluator weights) :verbose nil)))
-             (performance (weights)
-               (multiple-value-bind (mean stdev)
-                   (measure-performance (make-player weights) opponent nsamples)
-                 (print (list weights mean stdev))
-                 (values mean stdev)))
-             (goodness (weights)
-               (+ (* 0.1 (vector-norm weights :l 1))
-                  (* 0.2 (vector-norm weights :l 2))
-                  (* 0.9 (- (performance weights))))))
-      (multiple-value-bind (initial-mean initial-stdev) (performance initial-weights)
-        (format t "initial performance ~D (±~D)~%" initial-mean initial-stdev)
-        (let ((final-weights (spsa nsteps #'goodness initial-weights :c (+ initial-stdev 1e-3))))
-          (multiple-value-bind (final-mean final-stdev) (performance final-weights)
-            (fresh-line)
-            (format t "optimized performance from ~D (±~D) to ~D (±~D)~%"
-                    initial-mean initial-stdev final-mean final-stdev)
-            final-weights))))))
-
-(defun learn-feature-weights-against-mcts ()
-  (let* ((k (second (array-dimensions *featuremap-map*)))
-         (initial-weights (make-sequence '(vector single-float) k :initial-element (/ 1.0 k)))
-         (mcts-player (lambda (state) (mcts-decision state :max-sample-size 100 :verbose nil))))
-    (learn-feature-weights mcts-player initial-weights)))
 

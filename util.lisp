@@ -193,3 +193,9 @@
   (sb-sprof:with-profiling (:loop nil)
     (funcall fn))
   (sb-sprof:report :type :flat))
+
+;; return a vector that shares structure with 'a
+(defun array-as-vector (a)
+  (make-array (array-total-size a)
+              :element-type (array-element-type a)
+              :displaced-to a))

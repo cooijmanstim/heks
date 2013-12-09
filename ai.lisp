@@ -200,6 +200,8 @@
             (finally
              (measure-branching-factor branching-factor)
              (maybe-store-transposition state original-alpha beta alpha depth principal-variation)
+             (when (null (first principal-variation))
+               (break))
              (return (values alpha principal-variation)))))))
 
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator #'evaluate-state) (verbose t))
