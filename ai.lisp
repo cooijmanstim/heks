@@ -257,31 +257,33 @@
       (funcall updater (first moves))
       (funcall committer)
       (return-from minimax-decision (first moves))))
-  (let (value
-        variation
-        (*transposition-table* (make-transposition-table))
-        (*killer-table* (make-killers))
-        (*minimax-statistics* (make-minimax-statistics))
-        (*moves-cache* (make-moves-cache))
-        (state (copy-state state)))
-    (sb-ext:gc :full t)
-    (catch :out-of-time
-      (iter (for max-depth from 0 below *minimax-maximum-depth*)
-            (unwind-protect
-                 (progn
-                   (evaluation* evaluator state)
-                   (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
-                   (print (list max-depth value variation)))
-              (unless *out-of-time*
-                (funcall updater (first variation))))))
-    (let ((table-statistics
-           (list :ply-nkillers (map 'vector #'length *killer-table*))))
-      (when verbose
-        (print (list variation *minimax-statistics* table-statistics)))
-      (maxf *transposition-table-size-estimate* (table-size *transposition-table*))
-      (maxf *moves-cache-size-estimate*         (table-size *moves-cache*))
-      (funcall committer)
-      (values (first variation) value))))
+  (sb-ext:gc :full t)
+  (unwind-protect
+       (let (value
+             variation
+             (*transposition-table* (make-transposition-table))
+             (*killer-table* (make-killers))
+             (*minimax-statistics* (make-minimax-statistics))
+             (*moves-cache* (make-moves-cache))
+             (state (copy-state state)))
+         (catch :out-of-time
+           (iter (for max-depth from 0 below *minimax-maximum-depth*)
+                 (unwind-protect
+                      (progn
+                        (evaluation* evaluator state)
+                        (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
+                        (print (list max-depth value variation)))
+                   (unless *out-of-time*
+                     (funcall updater (first variation))))))
+         (let ((table-statistics
+                (list :ply-nkillers (map 'vector #'length *killer-table*))))
+           (when verbose
+             (print (list variation *minimax-statistics* table-statistics)))
+           (maxf *transposition-table-size-estimate* (table-size *transposition-table*))
+           (maxf *moves-cache-size-estimate*         (table-size *moves-cache*))
+           (funcall committer)
+           (values (first variation) value)))
+    (sb-ext:gc :full t)))
 
 (defun evaluation-decision (state &key (evaluator (make-material-evaluator)) (verbose t))
   (evaluation* evaluator state)
