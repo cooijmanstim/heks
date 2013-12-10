@@ -4,24 +4,26 @@
 
 (defparameter *minimax-maximum-depth* 30)
 
-(defun make-table ()
-  (hh-redblack:make-red-black-tree))
+(defun make-table (&key (size 100))
+  (make-hash-table :size size))
 
-;; have to wrap it in a cons because hh-redblack can't store nil -_-
+(defun table-size (table)
+  (hash-table-size table))
+
 (declaim (inline lookup (setf lookup)))
 (defun lookup (table key)
-  (multiple-value-bind (data presentp) (hh-redblack:rb-get table key)
+  (multiple-value-bind (data presentp) (gethash key table)
     (if presentp
-        (values (first data) t)
+        (values data t)
         (values nil nil))))
 (defun (setf lookup) (data table key)
-  (hh-redblack:rb-put table key (list data))
-  data)
+  (setf (gethash key table) data))
 
 (defparameter *moves-cache* nil)
+(defparameter *moves-cache-size-estimate* 1000000)
 
 (defun make-moves-cache ()
-  (make-table))
+  (make-table :size *moves-cache-size-estimate*))
 
 (defun lookup-moves (state)
   (multiple-value-bind (moves presentp) (lookup *moves-cache* (state-hash state))
@@ -41,13 +43,14 @@
   (move nil :type list))
 (sb-ext:define-hash-table-test state-equal state-hash)
 (defparameter *transposition-table* nil)
+(defparameter *transposition-table-size-estimate* 1000000)
 ;; store only deep transpositions to save memory.  shallow transpositions are used much more
 ;; often, but there are many more of them.  TODO: handle out of memory properly
 (defparameter *transposition-minimum-depth* 2)
 (declaim (fixnum *transposition-minimum-depth*))
 
 (defun make-transposition-table ()
-  (make-table))
+  (make-table :size *transposition-table-size-estimate*))
 
 (defun lookup-transposition (state &optional depth)
   (when-let ((transposition (lookup *transposition-table* (state-hash state))))
@@ -256,6 +259,7 @@
         (*minimax-statistics* (make-minimax-statistics))
         (*moves-cache* (make-moves-cache))
         (state (copy-state state)))
+    (sb-ext:gc :full t)
     (catch :out-of-time
       (iter (for max-depth from 0 below *minimax-maximum-depth*)
             (unwind-protect
@@ -265,11 +269,13 @@
                    (print (list max-depth value variation)))
               (unless *out-of-time*
                 (funcall updater (first variation))))))
-    (funcall committer)
     (let ((table-statistics
            (list :ply-nkillers (map 'vector #'length *killer-table*))))
       (when verbose
         (print (list variation *minimax-statistics* table-statistics)))
+      (maxf *transposition-table-size-estimate* (table-size *transposition-table*))
+      (maxf *moves-cache-size-estimate*         (table-size *moves-cache*))
+      (funcall committer)
       (values (first variation) value))))
 
 (defun evaluation-decision (state &key (evaluator (make-material-evaluator)) (verbose t))
