@@ -53,43 +53,6 @@
           (finally
            (return (eq (state-player state) *black-player*))))))
 
-;; minimization through simultaneous perturbation stochastic approximation
-;; returns final theta and a list of previous thetas, most recent first
-;; TODO: integrate this with the granularity thing, in which case we should
-;; ensure thetas always sum to 1. some may be negative, but as long as
-;; they sum to 1 the linear combination of features will be in [0,1]
-;; choose c approximately equal to the standard deviation of the measurements fn
-(defun spsa (n fn theta &key (c 0.5))
-  ;; if initial theta is zero, it won't move
-  (assert (not (every #'zerop theta)))
-  (let ((a 1) (bigA (/ n 10)) (alpha 0.602) (gamma 0.101)
-        (thetas (list theta)))
-    (iter (for k from 1 to n)
-          (for ak = (/ a (expt (+ k bigA) alpha)))
-          (for ck = (/ c (expt k gamma)))
-          (for delta = (iter (for x in-vector theta)
-                             (collect (- (* (random 2) 2) 1))))
-          (for theta- = (vector-plus theta (scale-vector (- ck) delta)))
-          (for theta+ = (vector-plus theta (scale-vector (+ ck) delta)))
-          (for y- = (funcall fn theta-))
-          (for y+ = (funcall fn theta+))
-          (for g^ = (map '(vector single-float)
-                         (lambda (d)
-                           (/ (- y+ y-) 2 ck d))
-                         delta))
-          (for dtheta = (scale-vector (* -1 ak) g^))
-          ;; constrain dtheta to have norm at most twice that of theta
-          ;; slows convergence at worst, enables convergence at best
-          (let ((dtheta-norm (vector-norm dtheta))
-                (dtheta-norm-max (* 2 (vector-norm theta))))
-            (when (> dtheta-norm dtheta-norm-max)
-              (setf dtheta (scale-vector (/ dtheta-norm-max dtheta-norm) dtheta))))
-          (setf theta (vector-plus theta dtheta))
-          (push theta thetas)
-          (print (list k theta)))
-    (values theta thetas)))
-
-;; perform moves according to a fast mcts decision, calling fn with the state every now and then
 (defun generate-states (n fn)
   (let ((observation-rate 0.05))
     (iter (with state = (make-initial-state))
