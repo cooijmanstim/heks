@@ -25,11 +25,16 @@
 (defun make-moves-cache ()
   (make-table :size *moves-cache-size-estimate*))
 
+(defparameter *moves-cache-statistics* (vector 0 0)) ;; hits, misses
+
 (defun lookup-moves (state)
   (multiple-value-bind (moves presentp) (lookup *moves-cache* (state-hash state))
-    (if presentp
-      moves
-      (setf (lookup *moves-cache* (state-hash state)) (moves state)))))
+    (cond (presentp
+           (incf (svref *moves-cache-statistics* 0))
+           moves)
+          (t
+           (incf (svref *moves-cache-statistics* 1))
+           (setf (lookup *moves-cache* (state-hash state)) (moves state))))))
 
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
 ;; but then collisions can happen, and stored information may be invalid.  if
