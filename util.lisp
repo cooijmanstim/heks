@@ -187,15 +187,19 @@
 (defparameter *out-of-time* nil)
 (defun time-limited (duration fn)
   (setq *out-of-time* nil)
-  (sb-thread:make-thread
-   (lambda ()
-     (sleep duration)
-     (setq *out-of-time* t)
-     (sb-thread:thread-yield))
-   :name "timer thread")
-  (unwind-protect
-       (funcall fn)
-    (setq *out-of-time* nil)))
+  (let ((timer-thread (sb-thread:make-thread
+                       (lambda ()
+                         (sleep duration)
+                         (setq *out-of-time* t)
+                         (sb-thread:thread-yield))
+                       :name "timer thread")))
+    (unwind-protect
+         (funcall fn)
+      ;; when the function finishes early, terminate the timer. this is
+      ;; technically not safe, but what could possibly go wrong?
+      (when (sb-thread:thread-alive-p timer-thread)
+        (sb-thread:terminate-thread timer-thread))
+      (setq *out-of-time* nil))))
 
 (defun profile (fn)
   (sb-sprof:reset)
