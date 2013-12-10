@@ -110,9 +110,11 @@
             (incf (svref kings player) valence))))))
   material)
 
-(defun update-running-material (material state breadcrumb)
+(defun update-running-material (material state move breadcrumb)
+  (declare (ignore move))
   (date-running-material  1 material state breadcrumb))
-(defun downdate-running-material (material state breadcrumb)
+(defun downdate-running-material (material state move breadcrumb)
+  (declare (ignore move))
   (date-running-material -1 material state breadcrumb))
 
 (defun get-running-material (material state moves)
@@ -141,15 +143,15 @@
     (when initializer
       (setf data (funcall initializer data state)))))
 
-(defun evaluation+ (evaluator state breadcrumb)
+(defun evaluation+ (evaluator state move breadcrumb)
   (with-slots (updater data) evaluator
     (when updater
-      (setf data (funcall updater data state breadcrumb)))))
+      (setf data (funcall updater data state move breadcrumb)))))
 
-(defun evaluation- (evaluator state breadcrumb)
+(defun evaluation- (evaluator state move breadcrumb)
   (with-slots (downdater data) evaluator
     (when downdater
-      (setf data (funcall downdater data state breadcrumb)))))
+      (setf data (funcall downdater data state move breadcrumb)))))
 
 (defun evaluation? (evaluator state moves)
   (if (null moves)
@@ -168,3 +170,8 @@
 
 (defun make-heuristic-evaluator ()
   (make-evaluator :getter #'heuristic-evaluation))
+
+
+
+
+

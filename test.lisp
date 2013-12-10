@@ -256,22 +256,21 @@
 (define-test material-evaluator
   (iter (repeat 10)
         (with evaluator = (make-material-evaluator))
-        (let* ((state (make-initial-state))
-               (breadcrumbs '())
-               (movess '()))
+        (let* ((state (make-initial-state)))
           (evaluation* evaluator state)
-          (iter (repeat 20)
-                (for moves = (moves state))
-                (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))
-                (push moves movess)
-                (let ((breadcrumb (apply-move state (random-elt moves))))
-                  (push breadcrumb breadcrumbs)
-                  (evaluation+ evaluator state breadcrumb)))
-          (iter (for breadcrumb in breadcrumbs)
-                (for moves in movess)
-                (evaluation- evaluator state breadcrumb)
-                (unapply-move state breadcrumb)
-                (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))))))
+          (labels ((recur (state depth)
+                     (if (= depth 0)
+                         (return))
+                     (let* ((moves (moves state))
+                            (move (random-elt moves))
+                            (breadcrumb (apply-move state move)))
+                       (evaluation+ evaluator state move breadcrumb)
+                       (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))
+                       (recur state (1- depth))
+                       (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))
+                       (evaluation- evaluator state move breadcrumb)
+                       (unapply-move state breadcrumb))))
+            (recur state 20)))))
 
 ;; commented out because verbose
 '(define-test spsa
@@ -291,6 +290,7 @@
                               (< (abs x) 1e-3))
                             x*)
                      x* xs fs)))))
+
 (define-test minimax-case-1
   (let ((state (read-from-string
                 "#S(STATE :BOARD #2A((#S(TILE :OBJECT :VOID :OWNER NIL)

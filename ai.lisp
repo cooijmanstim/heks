@@ -195,62 +195,69 @@
       (measure-node)
       (measure-moves moves)
       (setf moves (order-moves depth ply state moves))
-      (iter (for move in moves)
-            (with branching-factor = 0)
-            (for breadcrumb = (apply-move state move))
-            (with principal-variation = (list (first moves)))
-            (when (null breadcrumb)
-              ;; apply-move returns nil (or doesn't return at all) when an illegal
-              ;; move is applied.  we only get illegal moves if the state hash
-              ;; collides with the hash of another state.
-              (warn "hash collision detected")
-              (next-iteration))
-            (evaluation+ evaluator state breadcrumb)
-            (let ((current-variation '())
-                  (current-value *evaluation-minimum*))
-              (declare (fixnum branching-factor)
-                       (evaluation current-value))
-              (labels ((update-current (alpha beta)
-                         (declare (evaluation alpha beta))
-                         (multiple-value-bind (subvalue subvariation)
-                             (minimax state
-                                      (the fixnum (1- depth))
-                                      (the fixnum (1+ ply))
-                                      evaluator
-                                      (evaluation-inverse beta)
-                                      (evaluation-inverse alpha))
-                           (declare (evaluation subvalue))
-                           (setf current-value (evaluation-inverse subvalue)
-                                 current-variation (cons move subvariation))))
-                       (expand ()
-                         (incf branching-factor)
-                         (update-current alpha beta)))
-                (if-first-time
-                 (expand)
-                 ;; PVS/Negascout
-                 (let* ((pvs-alpha alpha)
-                        (pvs-beta (1+ pvs-alpha))
-                        (*minimax-statistics* nil))
-                   (declare (evaluation pvs-alpha pvs-beta))
-                   (update-current pvs-alpha pvs-beta)
-                   ;; search properly if current value inaccurate
-                   (when (and (<= pvs-beta current-value) (< current-value beta))
-                     (expand)))))
-              (evaluation- evaluator state breadcrumb)
-              (unapply-move state breadcrumb)
-              (when (< alpha current-value)
-                (setf alpha current-value
-                      principal-variation current-variation))
+      (macrolet ((with-tentative-move (&body body)
+                   `(let ((breadcrumb (apply-move state move)))
+                      (when (null breadcrumb)
+                        ;; apply-move returns nil (or doesn't return at all) when an illegal
+                        ;; move is applied.  we only get illegal moves if the state hash
+                        ;; collides with the hash of another state.
+                        (warn "hash collision detected")
+                        (next-iteration))
+                      ;; the move has been applied, make sure it is unapplied on exit
+                      (unwind-protect
+                           (progn
+                             (evaluation+ evaluator state move breadcrumb)
+                             ;; the evaluator has been updated, make sure it is downdated
+                             (unwind-protect
+                                  (progn ,@body)
+                               (evaluation- evaluator state move breadcrumb)))
+                        (unapply-move state breadcrumb)))))
+        (iter (for move in moves)
+              (with branching-factor = 0)
+              (with principal-variation = (list (first moves)))
+              (with-tentative-move
+                  (let ((current-variation '())
+                        (current-value *evaluation-minimum*))
+                    (declare (fixnum branching-factor)
+                             (evaluation current-value))
+                    (labels ((update-current (alpha beta)
+                               (declare (evaluation alpha beta))
+                               (multiple-value-bind (subvalue subvariation)
+                                   (minimax state
+                                            (the fixnum (1- depth))
+                                            (the fixnum (1+ ply))
+                                            evaluator
+                                            (evaluation-inverse beta)
+                                            (evaluation-inverse alpha))
+                                 (declare (evaluation subvalue))
+                                 (setf current-value (evaluation-inverse subvalue)
+                                       current-variation (cons move subvariation))))
+                             (expand ()
+                               (incf branching-factor)
+                               (update-current alpha beta)))
+                      (if-first-time
+                       (expand)
+                       ;; PVS/Negascout
+                       (let* ((pvs-alpha alpha) (pvs-beta (1+ pvs-alpha))
+                              (*minimax-statistics* nil))
+                         (declare (evaluation pvs-alpha pvs-beta))
+                         (update-current pvs-alpha pvs-beta)
+                         ;; search properly if current value inaccurate
+                         (when (and (<= pvs-beta current-value) (< current-value beta))
+                           (expand)))))
+                    (when (< alpha current-value)
+                      (setf alpha current-value
+                            principal-variation current-variation))))
               (when (>= alpha beta)
                 (store-killer ply move)
-                (finish)))
-            (finally
-             (measure-branching-factor branching-factor)
-             (maybe-store-transposition state original-alpha beta alpha depth principal-variation)
-             (when (null (first principal-variation))
-               (break))
-             (return (values alpha principal-variation)))))))
-
+                (finish))
+              (finally
+               (measure-branching-factor branching-factor)
+               (maybe-store-transposition state original-alpha beta alpha depth principal-variation)
+               (when (null (first principal-variation))
+                 (break))
+               (return (values alpha principal-variation))))))))
+  
 (defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator (make-material-evaluator)) (verbose t))
   (let ((moves (moves (copy-state state))))
     (when (= (length moves) 1)
@@ -289,10 +296,10 @@
   (evaluation* evaluator state)
   (iter (for move in (moves state))
         (for breadcrumb = (apply-move state move))
-        (evaluation+ evaluator state breadcrumb)
+        (evaluation+ evaluator state move breadcrumb)
         (finding move maximizing (evaluation-inverse (evaluation? evaluator state (moves state)))
                  into (best-move value))
-        (evaluation- evaluator state breadcrumb)
+        (evaluation- evaluator state move breadcrumb)
         (unapply-move state breadcrumb)
         (finally
          (when verbose
@@ -306,18 +313,20 @@
   (nwins 0 :type integer)
   (nvisits 0 :type integer)
   (untried-moves '() :type list)
-  (last-player nil :type (or null player)))
+  (last-player nil :type (or null player))
+  (state-hash 0 :type zobrist-hash))
 
 (defun make-mcts-node (state &optional move parent)
   (let ((node (make-instance 'mcts-node)))
-    (with-slots ((m move) (p parent) untried-moves last-player) node
+    (with-slots ((m move) (p parent) untried-moves last-player state-hash) node
       (setf m move
             p parent
-            untried-moves (moves state)
-            last-player (opponent (state-player state))))
+            untried-moves (moves state) ;; TODO: (lookup-moves state :generate nil)?
+            last-player (opponent (state-player state))
+            state-hash (state-hash state)))
     node))
 
-(defun uct-child (node)
+(defun mcts-node-uct-child (node)
   (with-slots (children (parent-nvisits nvisits)) node
     (labels ((uct-score (node)
                (with-slots (nwins nvisits) node
@@ -326,7 +335,15 @@
                                nvisits))))))
       (extremum children #'> :key #'uct-score))))
 
-(defun add-child (parent move state)
+(defun mcts-node-best-child (node)
+  ;; TODO: optimize
+  (extremum (mcts-node-children node) #'> :key #'mcts-node-nvisits))
+
+(defun mcts-node-win-rate (node)
+  (with-slots (nwins nvisits) node
+    (coerce (/ nwins nvisits) 'single-float)))
+
+(defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
     (with-slots (untried-moves children) parent
       (setf untried-moves (delete move untried-moves :test #'move-equal))
@@ -340,45 +357,99 @@
                     1
                     0))))
 
+(defun mcts-sample (node state)
+  (let ((state (copy-state state)))
+    (setf node (mcts-select node state))
+    (setf node (mcts-expand node state))
+    (mcts-backprop node (mcts-rollout state))))
+
+(defun mcts-select (node state)
+  (iter (while (and (emptyp (mcts-node-untried-moves node))
+                    (not (emptyp (mcts-node-children node)))))
+        (setf node (mcts-node-uct-child node))
+        (apply-move state (mcts-node-move node)))
+  node)
+
+(defun mcts-expand (node state)
+  (with-slots (untried-moves) node
+    (unless (emptyp untried-moves)
+      (let ((move (random-elt untried-moves)))
+        (apply-move state move)
+        (setf node (mcts-add-child node move state)))))
+  node)
+
+(defun mcts-rollout (state)
+  (iter (for moves = (moves state))
+        (until (emptyp moves))
+        (apply-move state (random-elt moves)))
+  (state-winner state))
+
+(defun mcts-backprop (node winner)
+  (iter (while node)
+        (mcts-update node winner)
+        (setf node (mcts-node-parent node))))
+
 (defparameter *mcts-maximum-depth* 200)
 (defun mcts-decision (root-state &key (max-sample-size most-positive-fixnum) (verbose t))
   (assert (not (state-endp root-state)))
   (let ((root-node (make-mcts-node root-state)))
-    (labels ((select (node state)
-               (iter (while (and (emptyp (mcts-node-untried-moves node))
-                                 (not (emptyp (mcts-node-children node)))))
-                     (setq node (uct-child node))
-                     (apply-move state (mcts-node-move node)))
-               node)
-             (expand (node state)
-               (with-slots (untried-moves) node
-                 (unless (emptyp untried-moves)
-                   (let ((move (random-elt untried-moves)))
-                     (apply-move state move)
-                     (setf node (add-child node move state)))))
-               node)
-             (rollout (state)
-               (iter (for moves = (moves state))
-                     (for depth from 0)
-                     (until (emptyp moves))
-                     (apply-move state (random-elt moves)))
-               (state-winner state))
-             (backprop (node winner)
-               (iter (while node)
-                     (mcts-update node winner)
-                     (setq node (mcts-node-parent node)))))
-      (iter (repeat max-sample-size)
-            (until *out-of-time*)
-            (for node = root-node)
-            (for state = (copy-state root-state))
-            (setf node (select node state))
-            (setf node (expand node state))
-            (backprop node (rollout state))))
-    (with-slots (children (root-nvisits nvisits) (root-nwins nwins)) root-node
-      (let ((best-child (extremum children #'> :key #'mcts-node-nvisits)))
-        (with-slots ((move-nvisits nvisits) (move-nwins nwins) move) best-child
-          (let ((state-value (coerce (- 1 (/ root-nwins root-nvisits)) 'single-float))
-                (move-value  (coerce      (/ move-nwins move-nvisits)  'single-float)))
-            (when verbose
-              (print (list :nsamples root-nvisits :state-value state-value :move-value move-value :move move)))
-            (values move move-value state-value)))))))
+    (iter (repeat max-sample-size)
+          (until *out-of-time*)
+          (mcts-sample root-node root-state))
+    (let* ((best-child (mcts-node-best-child root-node))
+           (move (mcts-node-move best-child))
+           (value (mcts-node-win-rate best-child)))
+      (when verbose
+        (print (list :nsamples (mcts-node-nvisits root-node) :value value :move move)))
+      (values move value))))
+
+;; an evaluator that can be reused and will get better as it is reused.
+;; uses evaluation and pondering time to build an mcts tree.
+
+(defstruct pmcts-tree
+  (root-node    nil :type (or null mcts-node))
+  (current-node nil :type (or null mcts-node)))
+
+(defun make-pmcts-tree-for-state (state)
+  (let ((root-node (make-mcts-node state)))
+    (make-pmcts-tree :root-node root-node :current-node root-node)))
+
+(defun initialize-mcts-evaluation (tree state)
+  ;; no-op, updater and downdater should make sure we are in sync
+  (assert (= (state-hash state) (mcts-node-state-hash (pmcts-tree-current-node tree))))
+  tree)
+
+(defun update-mcts-evaluation (tree state move breadcrumb)
+  (declare (ignore breadcrumb))
+  (with-slots (current-node) tree
+    ;; traverse the list of children to find the node with the appropriate state-hash
+    ;; (can't really do this cheaper without keeping a map of some sort. not sure if
+    ;; that is cheaper; there are less than twenty moves on average.)
+    (dolist (child (mcts-node-children current-node))
+      (when (= (state-hash state) (mcts-node-state-hash child))
+        (setf current-node child)
+        (return-from update-mcts-evaluation tree)))
+    ;; if we get here, the node hasn't been expanded yet.  do so.
+    (setf current-node (mcts-add-child current-node move state)))
+  tree)
+
+(defun downdate-mcts-evaluation (tree state move breadcrumb)
+  (declare (ignore state move breadcrumb))
+  (with-slots (current-node) tree
+    (setf current-node (mcts-node-parent current-node)))
+  tree)
+
+(defun get-mcts-evaluation (tree state moves)
+  (declare (ignore moves))
+  (with-slots (current-node) tree
+    (assert (= (state-hash state) (mcts-node-state-hash current-node)))
+    ;; take one sample -- with results from previous turns this should be enough
+    (mcts-sample current-node state)
+    (round (* 100 (- (mcts-node-win-rate (mcts-node-best-child current-node)) 0.5)))))
+
+(defun make-mcts-evaluator (state)
+  (make-evaluator :data (make-pmcts-tree-for-state state)
+                  :initializer #'initialize-mcts-evaluation
+                  :updater #'update-mcts-evaluation
+                  :downdater #'downdate-mcts-evaluation
+                  :getter #'get-mcts-evaluation))
