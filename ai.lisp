@@ -2,19 +2,32 @@
 
 (declaim (optimize (safety 3) (debug 3)))
 
-(defparameter *minimax-maximum-depth* 100)
+(defparameter *minimax-maximum-depth* 30)
+
+(defun make-table ()
+  (hh-redblack:make-red-black-tree))
+
+;; have to wrap it in a cons because hh-redblack can't store nil -_-
+(declaim (inline lookup (setf lookup)))
+(defun lookup (table key)
+  (multiple-value-bind (data presentp) (hh-redblack:rb-get table key)
+    (if presentp
+        (values (first data) t)
+        (values nil nil))))
+(defun (setf lookup) (data table key)
+  (hh-redblack:rb-put table key (list data))
+  data)
 
 (defparameter *moves-cache* nil)
 
 (defun make-moves-cache ()
-  (make-hash-table))
+  (make-table))
 
 (defun lookup-moves (state)
-  (multiple-value-bind (moves presentp) (gethash (state-hash state) *moves-cache*)
+  (multiple-value-bind (moves presentp) (lookup *moves-cache* (state-hash state))
     (if presentp
       moves
-      (setf (gethash (state-hash state) *moves-cache*)
-            (moves state)))))
+      (setf (lookup *moves-cache* (state-hash state)) (moves state)))))
 
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
 ;; but then collisions can happen, and stored information may be invalid.  if
@@ -34,19 +47,18 @@
 (declaim (fixnum *transposition-minimum-depth*))
 
 (defun make-transposition-table ()
-  (make-hash-table))
+  (make-table))
 
 (defun lookup-transposition (state &optional depth)
-  (when-let ((transposition (gethash (state-hash state) *transposition-table*)))
+  (when-let ((transposition (lookup *transposition-table* (state-hash state))))
     (if (and depth (>= depth (transposition-depth transposition)))
         nil
         transposition)))
 
 (defun ensure-transposition (state)
-  (if-let ((transposition (gethash (state-hash state) *transposition-table*)))
+  (if-let ((transposition (lookup *transposition-table* (state-hash state))))
     transposition
-    (setf (gethash (state-hash state) *transposition-table*)
-          (make-transposition))))
+    (setf (lookup *transposition-table* (state-hash state)) (make-transposition))))
 
 (defparameter *killer-table* nil)
 (defparameter *max-killers* 2)
