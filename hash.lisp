@@ -2,15 +2,16 @@
 
 (declaim (optimize (debug 3)))
 
-(deftype zobrist-hash () 'fixnum)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter *zobrist-bitstring-length* 128))
+(deftype zobrist-hash () `(unsigned-byte ,*zobrist-bitstring-length*))
 
-(defparameter *zobrist-ceiling* most-positive-fixnum)
 (defun zobrist-bitstring ()
-  (random *zobrist-ceiling*))
+  (random (expt 2 *zobrist-bitstring-length*)))
 
 (defparameter *zobrist-bitstring-positions*
   (let ((positions (make-array (append (v->list *board-dimensions*) (list 2 2))
-                               :element-type 'fixnum :initial-element 0))
+                               :element-type 'zobrist-hash :initial-element 0))
         (board (make-initial-board))) ;; to make looping easier
     (iter (for tile at ij of board)
           (iter (for k in (list *white-player* *black-player*))

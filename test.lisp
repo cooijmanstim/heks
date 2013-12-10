@@ -416,7 +416,7 @@
                               #S(TILE :OBJECT :VOID :OWNER NIL)))
                   :PLAYER 1
                   :ENDP NIL
-                  :HASH 55038748)"))
+                  :HASH 22507219339911910660638959860807479579)"))
         (*minimax-maximum-depth* 5)
         (*transposition-minimum-depth* 10))
     ;; some things changed since this state dump, but it shouldn't have changed the hashes

@@ -4,6 +4,18 @@
 
 (defparameter *minimax-maximum-depth* 100)
 
+(defparameter *moves-cache* nil)
+
+(defun make-moves-cache ()
+  (make-hash-table))
+
+(defun lookup-moves (state)
+  (multiple-value-bind (moves presentp) (gethash (state-hash state) *moves-cache*)
+    (if presentp
+      moves
+      (setf (gethash (state-hash state) *moves-cache*)
+            (moves state)))))
+
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
 ;; but then collisions can happen, and stored information may be invalid.  if
 ;; the stored move is invalid (highly likely), conditions will occur.
@@ -22,18 +34,18 @@
 (declaim (fixnum *transposition-minimum-depth*))
 
 (defun make-transposition-table ()
-  (make-hash-table :test 'state-equal))
+  (make-hash-table))
 
 (defun lookup-transposition (state &optional depth)
-  (when-let ((transposition (gethash state *transposition-table*)))
+  (when-let ((transposition (gethash (state-hash state) *transposition-table*)))
     (if (and depth (>= depth (transposition-depth transposition)))
         nil
         transposition)))
 
 (defun ensure-transposition (state)
-  (if-let ((transposition (gethash state *transposition-table*)))
+  (if-let ((transposition (gethash (state-hash state) *transposition-table*)))
     transposition
-    (setf (gethash (copy-state state) *transposition-table*)
+    (setf (gethash (state-hash state) *transposition-table*)
           (make-transposition))))
 
 (defparameter *killer-table* nil)
@@ -118,6 +130,12 @@
   (labels ((maybe-use-transposition ()
              (when-let ((transposition (lookup-transposition state depth)))
                ;; use stored values
+               ;; NOTE: in the case of a state hash collision it is possible that the
+               ;; transposition does not apply to the current state.  hence the conclusion
+               ;; drawn here may be entirely incorrect.
+               ;; furthermore, an illegal move may be returned from here, but this never
+               ;; happens at the toplevel so it should not cause a crash.  at worst the
+               ;; user is presented with a principal variation that ends in an illegal move.
                (with-slots (value type move)
                    transposition
                  (declare (evaluation value))
@@ -150,7 +168,8 @@
                        stored-move (first variation))))))
     (maybe-use-transposition)
     ;; investigate the subtree
-    (let ((moves (moves state)))
+    ;; NOTE: moves are cached in *moves-cache* and collisions between states are possible.
+    (let ((moves (lookup-moves state)))
       (when (or (<= depth 0) (null moves))
         (return-from minimax (values (evaluation? evaluator state moves) '())))
       (measure-node)
@@ -160,6 +179,12 @@
             (with branching-factor = 0)
             (for breadcrumb = (apply-move state move))
             (with principal-variation = (list (first moves)))
+            (when (null breadcrumb)
+              ;; apply-move returns nil (or doesn't return at all) when an illegal
+              ;; move is applied.  we only get illegal moves if the state hash
+              ;; collides with the hash of another state.
+              (warn "hash collision detected")
+              (next-iteration))
             (evaluation+ evaluator state breadcrumb)
             (let ((current-variation '())
                   (current-value *evaluation-minimum*))
@@ -212,12 +237,12 @@
       (funcall updater (first moves))
       (funcall committer)
       (return-from minimax-decision (first moves))))
-  ;; use a fresh table with every top-level search
   (let (value
         variation
         (*transposition-table* (make-transposition-table))
         (*killer-table* (make-killers))
         (*minimax-statistics* (make-minimax-statistics))
+        (*moves-cache* (make-moves-cache))
         (state (copy-state state)))
     (catch :out-of-time
       (iter (for max-depth from 0 below *minimax-maximum-depth*)

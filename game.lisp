@@ -139,9 +139,11 @@
            (v ij))
   (let* ((tile (board-tile board ij))
          (player (tile-owner tile))
+         (opponent (opponent player))
          (can-fly (can-fly (tile-object tile))))
     (labels ((recur (ij capture-points &aux captures)
-               (declare (v ij))
+               (declare (optimize (speed 3) (safety 0))
+                        (v ij))
                (dolist (didj *all-directions*)
                  (declare (v didj))
                  (block inner-loop
@@ -157,7 +159,7 @@
                               )
                              ((and (null capture-point)
                                    (member object '(:man :king))
-                                   (eq owner (opponent player))
+                                   (eq owner opponent)
                                    (not (member ij2 capture-points :test #'v=)))
                               ;; passing over a fresh enemy piece.
                               (setf capture-point ij2))
@@ -255,16 +257,27 @@
   (capture-tiles '() :type list)
   (crowned nil :type boolean))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter *illegal-is-error-p* t))
+(defmacro illegal-if (condition-expr &rest other-assert-arguments)
+  (if *illegal-is-error-p*
+      `(assert (not ,condition-expr) ,@other-assert-arguments)
+      `(when ,condition-expr (return nil))))
+
 (defun apply-move (state move)
   (declare (optimize (speed 3) (safety 0)))
   (with-slots (board player endp) state
-    (assert (and move (not (state-endp state))) (move state))
+    (illegal-if (or (null move)
+                    (state-endp state))
+                (move state))
     (let* ((initial-tile (board-tile board (the v (car move))))
            (moving-object (tile-object initial-tile))
            (can-fly (can-fly moving-object))
            (capture-points '()))
-      (assert (eq player (tile-owner initial-tile)) (move state))
-      (assert (member moving-object '(:man :king)) (move state))
+      (illegal-if (not (eq player (tile-owner initial-tile)))
+                  (move state))
+      (illegal-if (not (member moving-object '(:man :king)))
+                  (move state))
       ;; trace the path to figure out what's captured. might as well
       ;; do some validity checking. the checks here are safety nets
       ;; rather than guarantees. men's backward movement is not prevented,
@@ -275,9 +288,11 @@
         (multiple-value-bind (didj n)
             (displacement-direction (car prev-ij-cons)
                                     (car next-ij-cons))
-          (assert (member didj *all-directions* :test #'v=) (move state))
+          (illegal-if (not (member didj *all-directions* :test #'v=))
+                      (move state))
           ;; the only condition on the last tile is that it is empty
-          (assert (eq :empty (tile-object (board-tile board (car next-ij-cons)))) (move state))
+          (illegal-if (not (tile-empty-p board (car next-ij-cons)))
+                      (move state))
           ;; conditions on the rest of the tiles
           (let (capture-point)
             (do ((k 1 (1+ k))
@@ -288,9 +303,10 @@
               (with-slots (object owner) (board-tile board ij)
                 (ccase object
                   (:empty
-                   (assert can-fly (move state)))
+                   (illegal-if (not can-fly) (move state)))
                   ((:man :king)
-                   (assert (not (or capture-point (eq owner player))) (move state))
+                   ;; can't jump over multiple or own pieces
+                   (illegal-if (or capture-point (eq owner player)) (move state))
                    (setq capture-point ij)))))
             (when capture-point
               (push capture-point capture-points)))))
