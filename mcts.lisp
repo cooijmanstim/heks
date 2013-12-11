@@ -33,7 +33,8 @@
       (iter (for child in children)
             (for uct-score = (+ (mcts-node-win-rate child)
                                 (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
-                                         (mcts-node-nvisits child)))))
+                                         ;; race conditions make it possible for child-nvisits to be 0 here
+                                         (+ 1e-4 (mcts-node-nvisits child))))))
             (finding child maximizing uct-score)))))
 
 (defun mcts-node-best-child (node)
@@ -62,7 +63,13 @@
                     1
                     0))))
 
+(define-condition mcts-node-state-mismatch-error (error)
+  ((state :initarg :state)
+   (node :initarg :node)))
+
 (defun mcts-sample (node state)
+  (unless (= (state-hash state) (mcts-node-state-hash node))
+    (error 'mcts-node-state-mismatch-error :state state :node node))
   (let ((state (copy-state state)))
     (setf node (mcts-select node state))
     (setf node (mcts-expand node state))
@@ -75,13 +82,15 @@
         (apply-move state (mcts-node-move node)))
   node)
 
+(defparameter *mcts-expansion-rate* 3)
+
 (defun mcts-expand (node state)
-  (with-slots (untried-moves) node
-    (unless (emptyp untried-moves)
-      (let ((move (random-elt untried-moves)))
-        (apply-move state move)
-        (setf node (mcts-add-child node move state)))))
-  node)
+  (dotimes (i *mcts-expansion-rate* node)
+    (with-slots (untried-moves) node
+      (unless (emptyp untried-moves)
+        (let ((move (random-elt untried-moves)))
+          (apply-move state move)
+          (setf node (mcts-add-child node move state)))))))
 
 (defun mcts-rollout (state)
   (iter (for moves = (moves state))
@@ -117,19 +126,20 @@
   (let ((root-node (make-mcts-node state)))
     (make-pmcts-tree :root-node root-node :current-node root-node)))
 
+(defun mcts-child-for-state (node state)
+  ;; traverse the list of children to find the node with the appropriate state-hash
+  ;; (can't really do this more cheaply without keeping a map of some sort. not sure
+  ;; if that is cheaper; there are fewer than twenty moves on average.)
+  (dolist (child (mcts-node-children node))
+    (when (= (state-hash state) (mcts-node-state-hash child))
+      (return-from mcts-child-for-state child))))
+
 (defun update-pmcts-tree (tree state move breadcrumb)
   (declare (ignore breadcrumb))
   (with-slots (current-node) tree
-    ;; traverse the list of children to find the node with the appropriate state-hash
-    ;; (can't really do this more cheaply without keeping a map of some sort. not sure
-    ;; if that is cheaper; there are fewer than twenty moves on average.)
-    (let (foundp)
-      (dolist (child (mcts-node-children current-node))
-        (when (= (state-hash state) (mcts-node-state-hash child))
-          (setf current-node child
-                foundp t)))
-      (unless foundp
-        (setf current-node (mcts-add-child current-node move state)))))
+    (setf current-node
+          (or (mcts-child-for-state current-node state)
+              (mcts-add-child current-node move state))))
   tree)
 
 (defun downdate-pmcts-tree (tree state move breadcrumb)
@@ -137,3 +147,6 @@
   (with-slots (current-node) tree
     (setf current-node (mcts-node-parent current-node)))
   tree)
+
+(defun pmcts-sample (tree state)
+  (mcts-sample (slot-value tree 'current-node) state))

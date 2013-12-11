@@ -74,3 +74,5 @@
           (update-running-average support-mean support-sample-size (mcts-node-nvisits current-node))
           (round (* 100 (- (mcts-node-win-rate (mcts-node-best-child current-node)) 0.5)))))))
 
+(defun pmcts-evaluator-sample (evaluator state)
+  (pmcts-sample (slot-value evaluator 'tree) state))

@@ -39,7 +39,7 @@
 
 (defun game-add-agent (game agent)
   (far-push agent (game-agents game))
-  (when (typep agent agent)
+  (when (typep agent 'agent)
     (game-add-observing-agent game agent)))
 
 (defun game-update (game move)

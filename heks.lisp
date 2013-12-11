@@ -3,7 +3,14 @@
 (declaim (optimize (debug 3)))
 
 (defun main ()
-  (graphical-game))
+  (let ((game (make-game))
+        (agent (make-instance 'minimax-pmcts-agent)))
+    (game-add-agent game (make-instance 'minimax-agent :evaluator (make-instance 'material-evaluator)))
+    (game-add-agent game agent)
+    (unwind-protect
+         (graphical-game game)
+      (cleanup agent))
+    agent))
 
 ;; TODO: handle end-of-game
 (defun graphical-game (&optional (game (let ((game (make-game)))
@@ -25,10 +32,7 @@
                         (:minimax-heuristic ,(make-instance 'minimax-agent
                                                             :evaluator (make-instance 'simple-evaluator
                                                                                       :function #'heuristic-evaluation)))
-                        (:minimax-mcts      ,(make-instance 'minimax-pmcts-agent))
                         (:mcts              ,(make-instance 'pmcts-agent :tree (make-pmcts-tree-for-state state))))))
-      (iter (for (name agent) in all-agents)
-            (game-add-observing-agent game agent))
       (sdl:with-init ()
         (labels ((redraw ()
                    (sdl:clear-display *background-color*)
@@ -110,6 +114,8 @@
                     (unless agent-deciding (undo-move)))
                    ((sdl:key= key :sdl-key-return)
                     (unless agent-deciding (let-the-games-begin)))
+                   ((sdl:key= key :sdl-key-f1)
+                    (unless agent-deciding (current-agent-move)))
                    ((sdl:key= key :sdl-key-f5)
                     (unless agent-deciding (agent-move :minimax-material)))
                    ((sdl:key= key :sdl-key-f6)
