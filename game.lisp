@@ -172,39 +172,38 @@
            (type board board)
            (v ij))
   (let* ((opponent (opponent player)))
-    (labels ((recur (ij capture-points &aux captures)
-               (declare (optimize (speed 3) (safety 0))
-                        (v ij))
-               (dolist (didj *all-directions*)
-                 (declare (v didj))
-                 (block inner-loop
-                   (do ((ij2 (v+v ij didj) (v+v ij2 didj))
-                        (capture-point nil))
-                       (nil)
-                     (declare (v ij2))
-                     (with-slots (object owner) (board-tile board ij2)
-                       (cond ((and (null capture-point)
-                                   (eq object :empty))
-                              ;; haven't yet passed over an enemy piece. no capture, but keep going.
-                              )
-                             ((and (null capture-point)
-                                   (member object '(:man :king))
-                                   (eq owner opponent)
-                                   (not (member ij2 capture-points :test #'v=)))
-                              ;; passing over a fresh enemy piece.
-                              (setf capture-point ij2))
-                             ((and capture-point
-                                   (eq object :empty))
-                              ;; have passed over an enemy piece. possible stopping point or turning point.
-                              (if-let ((continuations (recur ij2 (cons capture-point capture-points))))
-                                (dolist (continuation continuations)
-                                  (push (cons ij continuation) captures))
-                                (push (list ij ij2) captures)))
-                             (t
-                              ;; this is going nowhere
-                              (return-from inner-loop)))))))
-               captures))
-      (recur ij '()))))
+    (inlinerecur 2 (recur ij '()) (ij capture-points &aux captures)
+        (declare (optimize (speed 3) (safety 0))
+                 (v ij))
+      (dolist (didj *all-directions*)
+        (declare (v didj))
+        (block inner-loop
+          (do ((ij2 (v+v ij didj) (v+v ij2 didj))
+               (capture-point nil))
+              (nil)
+            (declare (v ij2))
+            (with-slots (object owner) (board-tile board ij2)
+              (cond ((and (null capture-point)
+                          (eq object :empty))
+                     ;; haven't yet passed over an enemy piece. no capture, but keep going.
+                     )
+                    ((and (null capture-point)
+                          (member object '(:man :king))
+                          (eq owner opponent)
+                          (not (member ij2 capture-points :test #'v=)))
+                     ;; passing over a fresh enemy piece.
+                     (setf capture-point ij2))
+                    ((and capture-point
+                          (eq object :empty))
+                     ;; have passed over an enemy piece. possible stopping point or turning point.
+                     (if-let ((continuations (funcall recur ij2 (cons capture-point capture-points))))
+                       (dolist (continuation continuations)
+                         (push (cons ij continuation) captures))
+                       (push (list ij ij2) captures)))
+                    (t
+                     ;; this is going nowhere
+                     (return-from inner-loop)))))))
+      captures)))
 
 ;;; a move is a list (x y z ...) of points visited, and everything between the points is captured
 ;;; NOTE: potentially modifies state; sets endp if no moves. this is unconditionally set to nil by
