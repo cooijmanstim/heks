@@ -17,7 +17,9 @@
     (with-slots ((m move) (p parent) untried-moves last-player state-hash) node
       (setf m move
             p parent
-            untried-moves (moves state)
+            untried-moves (if *moves-cache*
+                              (lookup-moves state)
+                              (moves state))
             last-player (opponent (state-player state))
             state-hash (state-hash state)))
     node))
@@ -49,7 +51,7 @@
 (defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
     (with-slots (untried-moves children) parent
-      (setf untried-moves (delete move untried-moves :test #'move-equal))
+      (deletef move untried-moves :test #'move-equal)
       (push node children))
     node))
 
@@ -121,14 +123,13 @@
     ;; traverse the list of children to find the node with the appropriate state-hash
     ;; (can't really do this more cheaply without keeping a map of some sort. not sure
     ;; if that is cheaper; there are fewer than twenty moves on average.)
-    (dolist (child (mcts-node-children current-node))
-      (when (= (state-hash state) (mcts-node-state-hash child))
-        (setf current-node child)
-        (mcts-sample current-node state)
-        (return-from update-pmcts-tree tree)))
-    ;; if we get here, the node hasn't been expanded yet.  do so.
-    (setf current-node (mcts-add-child current-node move state))
-    (mcts-sample current-node state))
+    (let (foundp)
+      (dolist (child (mcts-node-children current-node))
+        (when (= (state-hash state) (mcts-node-state-hash child))
+          (setf current-node child
+                foundp t)))
+      (unless foundp
+        (setf current-node (mcts-add-child current-node move state)))))
   tree)
 
 (defun downdate-pmcts-tree (tree state move breadcrumb)

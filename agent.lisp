@@ -31,7 +31,12 @@
   ;; TODO: judge amount of time needed
   (time-limited time
                 (lambda ()
-                  (minimax-decision state (minimax-agent-evaluator agent)))))
+                  (with-slots (evaluator) agent
+                    (prog1
+                        (minimax-decision state evaluator)
+                      (when (typep evaluator 'pmcts-evaluator)
+                        (fresh-line)
+                        (format t "pmcts evaluator support: ~A" (slot-value evaluator 'support-mean))))))))
 
 (defclass pmcts-agent (agent)
   ((tree :type pmcts-tree

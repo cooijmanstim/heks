@@ -5,7 +5,8 @@
 (defclass evaluator () ())
 
 ;; called with the initial state
-(defgeneric evaluation* (evaluator state))
+(defgeneric evaluation* (evaluator state)
+  (:method ((evaluator evaluator) state)))
 ;; called after a move is applied to state
 (defgeneric evaluation+ (evaluator state move breadcrumb)
   (:method ((evaluator evaluator) state move breadcrumb)))
@@ -51,8 +52,8 @@
    (support-sample-size :initform 0 :type integer)))
 
 (defmethod evaluation* ((evaluator pmcts-evaluator) state)
-  ;; no-op, updater and downdater should make sure we are in sync
-  (assert (= (state-hash state) (mcts-node-state-hash (pmcts-tree-current-node (slot-value evaluator 'tree))))))
+  (setf (slot-value evaluator 'tree)
+        (make-pmcts-tree-for-state state)))
 
 (defmethod evaluation+ ((evaluator pmcts-evaluator) state move breadcrumb)
   (update-pmcts-tree (slot-value evaluator 'tree) state move breadcrumb))
@@ -60,7 +61,7 @@
   (downdate-pmcts-tree (slot-value evaluator 'tree) state move breadcrumb))
 
 (defmethod evaluation? ((evaluator pmcts-evaluator) state moves)
-  (declare (optimize (speed 3) (safety 1)))
+  (declare (optimize (debug 3) (safety 1)))
   (if (null moves)
       *evaluation-minimum*
       (with-slots (tree support-mean support-sample-size) evaluator
@@ -68,8 +69,8 @@
                  (integer support-sample-size))
         (with-slots (current-node) tree
           (assert (= (state-hash state) (mcts-node-state-hash current-node)))
-          ;; take one sample -- with results from previous turns this should be enough
-          (mcts-sample current-node state)
+          (dotimes (i 5)
+            (mcts-sample current-node state))
           (update-running-average support-mean support-sample-size (mcts-node-nvisits current-node))
           (round (* 100 (- (mcts-node-win-rate (mcts-node-best-child current-node)) 0.5)))))))
 

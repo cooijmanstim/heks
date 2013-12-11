@@ -7,7 +7,8 @@
 
 ;; TODO: handle end-of-game
 (defun graphical-game (&optional (game (let ((game (make-game)))
-                                         (game-add-agent game nil))))
+                                         (game-add-agent game nil)
+                                         game)))
   (with-slots (state) game
     (let (;; UI state: submove is the partial move constructed so far. all-moves
           ;; and supermoves respectively contain all legal moves and all legal
