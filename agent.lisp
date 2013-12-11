@@ -120,4 +120,4 @@
   (with-slots (ponderers keep-pondering) agent
     (setf keep-pondering nil)
     (dolist (ponderer ponderers)
-      (sb-thread:join-thread ponderer))))
+      (sb-thread:join-thread ponderer :default nil))))
