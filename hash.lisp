@@ -20,10 +20,14 @@
                       (setf (aref positions (s1 ij) (s2 ij) k l) (zobrist-bitstring)))))
     positions))
 (defparameter *zobrist-bitstring-black-to-move* (zobrist-bitstring))
+(declaim (type (simple-array zobrist-hash) *zobrist-bitstring-positions*)
+         (zobrist-hash *zobrist-bitstring-black-to-move*))
 
-;; desperately-TODO: stop using keywords for white/black and man/king
 (declaim (ftype (function (tile v) zobrist-hash) tile-zobrist-bitstring))
 (defun tile-zobrist-bitstring (tile ij)
+  (declare (optimize (speed 3) (safety 1))
+           (tile tile)
+           (v ij))
   (with-slots (object owner) tile
     (if (not (member object '(:man :king)))
         0
