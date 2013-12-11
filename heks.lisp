@@ -137,4 +137,4 @@
     (initialize agent state)
     (time-limited 30 (lambda ()
                        (profile (lambda ()
-                                  (decide agent state)))))))
+                                  (loop (decide agent state))))))))

@@ -269,23 +269,26 @@
                   (when-let ((piece-moves (piece-moves board ij object owner)))
                     (push piece-moves moves-lists)))))))))
     (cond (captures-lists
-           ;; player must choose one of the longest captures
-           (let ((highest-length 1)
-                 (longest-captures '()))
-             (dolist (captures captures-lists)
-               (dolist (capture captures)
-                 (let ((length (length (the list capture))))
-                   (cond ((> length highest-length)
-                          (setf highest-length length
-                                longest-captures (list capture)))
-                         ((= length highest-length)
-                          (push capture longest-captures))))))
-             longest-captures))
+           (apply #'longest-captures captures-lists))
           (moves-lists
            (apply #'nconc moves-lists))
           (t
            (setf (state-endp state) t)
            '()))))
+
+(defun longest-captures (&rest captures-lists)
+  (declare (optimize (speed 3) (safety 0)))
+  (let ((highest-length 1)
+        (longest-captures '()))
+    (dolist (captures captures-lists)
+      (dolist (capture captures)
+        (let ((length (length (the list capture))))
+          (cond ((> length highest-length)
+                 (setf highest-length length
+                       longest-captures (list capture)))
+                ((= length highest-length)
+                 (push capture longest-captures))))))
+    longest-captures))
 
 (defun submovep (sub super)
   (iter (for a on sub)
