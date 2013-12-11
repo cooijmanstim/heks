@@ -1,5 +1,19 @@
 (in-package :heks)
 
+;; efficiently call a self-recursive anonymous function by unrolling it a couple of times
+;; and letting the compiler inline it all
+(defmacro inlinerecur (k (recurvar &rest initial-arguments) lambda-list &body body)
+  (let ((names (loop for i from 0 to k
+                  collect (gensym "INLINERECUR-"))))
+    ;; bind a chain of functions, each calling the next, with the final one calling itself
+    `(labels ,(maplist (lambda (names)
+                         `(,(first names) ,lambda-list
+                            (let ((,recurvar (function ,(or (second names) (first names)))))
+                              ,@body)))
+                       names)
+       (declare (inline ,@(butlast names)))
+       (,(first names) ,@initial-arguments))))
+
 ;; like nbutlast, but returning the second part of the list as an extra value
 (defun nbutlast* (l &optional n)
   (do ((x       (cons 'dummy l) (cdr x))
