@@ -406,8 +406,6 @@
                   :HASH 22507219339911910660638959860807479579)"))
         (*minimax-maximum-depth* 5)
         (*transposition-minimum-depth* 10))
-    ;; some things changed since this state dump, but it shouldn't have changed the hashes
-    (assert-equal (state-hash state) (zobrist-hash state))
     (multiple-value-bind (move value)
         (minimax-decision (copy-state state) (make-simple-evaluator #'material-evaluation))
       (declare (ignore move))
