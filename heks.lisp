@@ -25,8 +25,7 @@
                         (:minimax-heuristic ,(make-instance 'minimax-agent
                                                             :evaluator (make-instance 'simple-evaluator
                                                                                       :function #'heuristic-evaluation)))
-                        (:minimax-mcts      ,(make-instance 'minimax-agent
-                                                            :evaluator (make-instance 'pmcts-evaluator )))
+                        (:minimax-mcts      ,(make-instance 'minimax-pmcts-agent))
                         (:mcts              ,(make-instance 'pmcts-agent :tree (make-pmcts-tree-for-state state))))))
       (iter (for (name agent) in all-agents)
             (game-add-observing-agent game agent))

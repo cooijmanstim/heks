@@ -32,11 +32,7 @@
   (time-limited time
                 (lambda ()
                   (with-slots (evaluator) agent
-                    (prog1
-                        (minimax-decision state evaluator)
-                      (when (typep evaluator 'pmcts-evaluator)
-                        (fresh-line)
-                        (format t "pmcts evaluator support: ~A" (slot-value evaluator 'support-mean))))))))
+                    (minimax-decision state evaluator)))))
 
 (defclass pmcts-agent (agent)
   ((tree :type pmcts-tree
@@ -57,3 +53,11 @@
                 (lambda ()
                   (mcts-decision state :root-node (pmcts-tree-current-node (pmcts-agent-tree agent))))))
 
+(defclass minimax-pmcts-agent (minimax-agent)
+  ((evaluator :initform (make-instance 'pmcts-evaluator))))
+
+(defmethod decide :after ((agent minimax-pmcts-agent) state &key (time 10))
+  (declare (ignore state time))
+  (with-slots (evaluator) agent
+    (fresh-line)
+    (format t "mean pmcts evaluator support: ~A" (slot-value evaluator 'support-mean))))
