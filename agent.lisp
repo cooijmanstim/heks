@@ -29,7 +29,7 @@
 (defmethod decide ((agent minimax-agent) state)
   ;; TODO: use an instance variable instead of global *out-of-time*
   (time-limited 10 (lambda ()
-                     (minimax-decision state :evaluator (minimax-agent-evaluator agent)))))
+                     (minimax-decision state (minimax-agent-evaluator agent)))))
 
 (defclass pmcts-agent (agent)
   ((tree :type pmcts-tree
