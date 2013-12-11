@@ -185,48 +185,51 @@
 ;;; unapply-move.
 (defun moves (state)
   (declare (optimize (speed 3) (safety 0)))
-  (with-slots (board player endp) state
+  (when (state-endp state)
+    (return-from moves '()))
+  (let ((board (state-board state))
+        (player (state-player state)))
     (declare (type board board))
-    (unless endp
-      (let (captures-lists moves-lists
-            (m (- *board-size* 1))
-            (n (- *board-size* 1)))
-        (declare (fixnum m n))
-        (do ((i 1 (1+ i)))
-            ((= i m))
-          (declare (fixnum i))
-          (do* ((j 1 (1+ j))
-                (ij (v i j) (v i j)))
-               ((= j n))
-            (declare (fixnum j)
-                     (v ij))
-            (when (eq (tile-owner (board-tile board ij)) player)
-              (let (piece-captures piece-moves)
-                (setf piece-captures (piece-captures board ij))
-                (if piece-captures
-                    (push piece-captures captures-lists)
-                    (unless captures-lists
-                      (setq piece-moves (piece-moves board ij))
-                      (when piece-moves
-                        (push piece-moves moves-lists))))))))
-        (cond (captures-lists
-               ;; player must choose one of the longest captures
-               (let ((highest-length 1)
-                     (longest-captures '()))
-                 (dolist (captures captures-lists)
-                   (dolist (capture captures)
-                     (let ((length (length (the list capture))))
-                       (cond ((> length highest-length)
-                              (setf highest-length length
-                                    longest-captures (list capture)))
-                             ((= length highest-length)
-                              (push capture longest-captures))))))
-                 longest-captures))
-              (moves-lists
-               (reduce #'nconc moves-lists))
-              (t
-               (setf endp t)
-               '()))))))
+    (let (captures-lists
+          moves-lists
+          (m (- *board-size* 1))
+          (n (- *board-size* 1)))
+      (declare (fixnum m n))
+      (do ((i 1 (1+ i)))
+          ((= i m))
+        (declare (fixnum i))
+        (do* ((j 1 (1+ j))
+              (ij (v i j) (v i j)))
+             ((= j n))
+          (declare (fixnum j)
+                   (v ij))
+          (when (eq (tile-owner (board-tile board ij)) player)
+            (let (piece-captures piece-moves)
+              (setf piece-captures (piece-captures board ij))
+              (if piece-captures
+                  (push piece-captures captures-lists)
+                  (unless captures-lists
+                    (setq piece-moves (piece-moves board ij))
+                    (when piece-moves
+                      (push piece-moves moves-lists))))))))
+      (cond (captures-lists
+             ;; player must choose one of the longest captures
+             (let ((highest-length 1)
+                   (longest-captures '()))
+               (dolist (captures captures-lists)
+                 (dolist (capture captures)
+                   (let ((length (length (the list capture))))
+                     (cond ((> length highest-length)
+                            (setf highest-length length
+                                  longest-captures (list capture)))
+                           ((= length highest-length)
+                            (push capture longest-captures))))))
+               longest-captures))
+            (moves-lists
+             (reduce #'nconc moves-lists))
+            (t
+             (setf (state-endp state) t)
+             '())))))
 
 (defun submovep (sub super)
   (iter (for a on sub)
