@@ -101,53 +101,59 @@
     (assert-equalp ijs (reverse ijs-black))))
 
 (define-test piece-moves
-  (let ((board (make-test-board-with `((1 1 :man ,*white-player*)
-                                       (1 2 :man ,*black-player*)
-                                       (2 1 :man ,*black-player*)
-                                       (2 3 :man ,*black-player*)
-                                       (3 4 :man ,*white-player*)))))
-    (assert-equality #'moveset-equal
-                     (list (list (v 1 1) (v 2 2)))
-                     (piece-moves board (v 1 1)))
-    (assert-equality #'moveset-equal
-                     (list (list (v 3 4) (v 3 5))
-                           (list (v 3 4) (v 4 4))
-                           (list (v 3 4) (v 4 5)))
-                     (piece-moves board (v 3 4)))
-    (assert-equality #'moveset-equal
-                     '()
-                     (piece-moves board (v 1 2)))
-    (assert-equality #'moveset-equal
-                     '()
-                     (piece-moves board (v 2 1)))
-    (assert-equality #'moveset-equal
-                     (list (list (v 2 3) (v 1 3))
-                           (list (v 2 3) (v 2 2)))
-                     (piece-moves board (v 2 3)))))
+  (labels ((piece-moves* (board ij)
+             (with-slots (object owner) (board-tile board ij)
+               (piece-moves board ij object owner))))
+    (let ((board (make-test-board-with `((1 1 :man ,*white-player*)
+                                         (1 2 :man ,*black-player*)
+                                         (2 1 :man ,*black-player*)
+                                         (2 3 :man ,*black-player*)
+                                         (3 4 :man ,*white-player*)))))
+      (assert-equality #'moveset-equal
+                       (list (list (v 1 1) (v 2 2)))
+                       (piece-moves* board (v 1 1)))
+      (assert-equality #'moveset-equal
+                       (list (list (v 3 4) (v 3 5))
+                             (list (v 3 4) (v 4 4))
+                             (list (v 3 4) (v 4 5)))
+                       (piece-moves* board (v 3 4)))
+      (assert-equality #'moveset-equal
+                       '()
+                       (piece-moves* board (v 1 2)))
+      (assert-equality #'moveset-equal
+                       '()
+                       (piece-moves* board (v 2 1)))
+      (assert-equality #'moveset-equal
+                       (list (list (v 2 3) (v 1 3))
+                             (list (v 2 3) (v 2 2)))
+                       (piece-moves* board (v 2 3))))))
 
 (define-test piece-captures
-  (let ((board (make-test-board-with `((1 1 :man ,*white-player*)
-                                       (1 2 :man ,*black-player*)
-                                       (2 1 :man ,*black-player*)
-                                       (2 3 :man ,*black-player*)
-                                       (3 4 :man ,*white-player*)))))
-    (assert-equality #'moveset-equal
-                     (list (list (v 1 1) (v 3 1))
-                           (list (v 1 1) (v 1 3) (v 3 3)))
-                     (piece-captures board (v 1 1)))
-    (assert-equality #'moveset-equal
-                     '()
-                     (piece-captures board (v 3 4)))
-    (assert-equality #'moveset-equal
-                     '()
-                     (piece-captures board (v 1 2)))
-    (assert-equality #'moveset-equal
-                     '()
-                     (piece-captures board (v 2 1)))
-    (assert-equality #'moveset-equal
-                     (list (list (v 2 3) (v 4 5)))
-                     (piece-captures board (v 2 3)))))
-
+  (labels ((piece-captures* (board ij)
+             (with-slots (object owner) (board-tile board ij)
+               (piece-captures board ij object owner))))
+    (let ((board (make-test-board-with `((1 1 :man ,*white-player*)
+                                         (1 2 :man ,*black-player*)
+                                         (2 1 :man ,*black-player*)
+                                         (2 3 :man ,*black-player*)
+                                         (3 4 :man ,*white-player*)))))
+      (assert-equality #'moveset-equal
+                       (list (list (v 1 1) (v 3 1))
+                             (list (v 1 1) (v 1 3) (v 3 3)))
+                       (piece-captures* board (v 1 1)))
+      (assert-equality #'moveset-equal
+                       '()
+                       (piece-captures* board (v 3 4)))
+      (assert-equality #'moveset-equal
+                       '()
+                       (piece-captures* board (v 1 2)))
+      (assert-equality #'moveset-equal
+                       '()
+                       (piece-captures* board (v 2 1)))
+      (assert-equality #'moveset-equal
+                       (list (list (v 2 3) (v 4 5)))
+                       (piece-captures* board (v 2 3))))))
+  
 (define-test moves
   (let ((board (make-test-board-with `((1 1 :man ,*white-player*)
                                        (1 2 :man ,*black-player*)
