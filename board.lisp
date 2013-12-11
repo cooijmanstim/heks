@@ -162,34 +162,3 @@
                (for ij = (v i j))
                (always (tile-equal (board-tile board1 ij)
                                    (board-tile board2 ij)))))))
-
-(defstruct (state (:copier nil))
-  (board nil :type board)
-  (player *white-player* :type player)
-  (endp nil :type boolean)
-  (hash 0 :type zobrist-hash))
-
-(defun make-initial-state ()
-  (let ((board (make-initial-board)))
-    (make-state :board board
-                :player *white-player*
-                :hash (logxor (zobrist-hash-board board)
-                              (zobrist-hash-player *white-player*))
-                :endp nil)))
-
-(defun copy-state (state)
-  (with-slots (board player hash endp) state
-    (make-state :board (copy-board board)
-                :player player
-                :hash hash
-                :endp endp)))
-
-(defun state-equal (a b)
-  (and (= (state-player a) (state-player b))
-       (= (state-hash a) (state-hash b))
-       (board-equal (state-board a) (state-board b))))
-
-(defun state-winner (state)
-  (with-slots (endp player) state
-    (assert endp)
-    (opponent player)))

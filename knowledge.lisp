@@ -34,10 +34,10 @@
               (:king (incf (the fixnum (svref kings owner)))))))
     (values men kings)))
 
-(declaim (ftype (function (t state) evaluation) material-evaluation))
-(defun material-evaluation (data state)
+(declaim (ftype (function (state list) evaluation) material-evaluation))
+(defun material-evaluation (state moves)
   (declare (optimize (speed 3) (safety 0))
-           (ignore data))
+           (ignore moves))
   (multiple-value-bind (men kings) (count-material state)
     (let* ((us (state-player state))
            (them (opponent us)))
@@ -45,10 +45,10 @@
                  (+ (the fixnum (svref men player)) (the fixnum (* *king-value* (the fixnum (svref kings player)))))))
         (- (material-score us) (material-score them))))))
 
-(declaim (ftype (function (t state) evaluation) heuristic-evaluation))
-(defun heuristic-evaluation (data state)
+(declaim (ftype (function (state list) evaluation) heuristic-evaluation))
+(defun heuristic-evaluation (state moves)
   (declare (optimize (speed 3) (safety 0))
-           (ignore data))
+           (ignore moves))
   (let* ((men           (vector 0 0))
          (kings         (vector 0 0))
          (capturability (vector 0 0))
@@ -117,56 +117,9 @@
   (declare (ignore move))
   (date-running-material -1 material state breadcrumb))
 
-(defun get-running-material (material state moves)
-  (declare (ignore moves))
+(defun get-material-advantage (material player)
   (with-slots (men kings) material
-    (with-slots (player) state
-      (labels ((material-score (player)
-                 (+ (svref men player)
-                    (* *king-value* (svref kings player)))))
-        (- (material-score player) (material-score (opponent player)))))))
-
-;; updater/downdater are called with data as first argument and return the new value
-(defstruct evaluator
-  data
-  ;; called with the initial state
-  (initializer nil :type (or null (function (t state) t)))
-  ;; called after a move is applied to state
-  (updater nil :type (or null (function (t state list breadcrumb) t)))
-  ;; called before a move is unapplied to state
-  (downdater nil :type (or null (function (t state list breadcrumb) t)))
-  ;; called to evaluate a state
-  (getter (constantly 0) :type (function (t state list) evaluation)))
-
-(defun evaluation* (evaluator state)
-  (with-slots (initializer data) evaluator
-    (when initializer
-      (setf data (funcall initializer data state)))))
-
-(defun evaluation+ (evaluator state move breadcrumb)
-  (with-slots (updater data) evaluator
-    (when updater
-      (setf data (funcall updater data state move breadcrumb)))))
-
-(defun evaluation- (evaluator state move breadcrumb)
-  (with-slots (downdater data) evaluator
-    (when downdater
-      (setf data (funcall downdater data state move breadcrumb)))))
-
-(defun evaluation? (evaluator state moves)
-  (if (null moves)
-      *evaluation-minimum*
-      (with-slots (getter data) evaluator
-        (funcall getter data state moves))))
-
-(defun make-material-evaluator ()
-  (make-evaluator :initializer #'initialize-running-material
-                  :updater #'update-running-material
-                  :downdater #'downdate-running-material
-                  :getter #'get-running-material))
-
-(defun make-slow-material-evaluator ()
-  (make-evaluator :getter #'material-evaluation))
-
-(defun make-heuristic-evaluator ()
-  (make-evaluator :getter #'heuristic-evaluation))
+    (labels ((material-score (player)
+               (+ (svref men player)
+                  (* *king-value* (svref kings player)))))
+      (- (material-score player) (material-score (opponent player))))))

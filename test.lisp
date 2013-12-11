@@ -242,7 +242,7 @@
 ;; the caching 'material-evaluator
 (define-test material-evaluator
   (iter (repeat 10)
-        (with evaluator = (make-material-evaluator))
+        (with evaluator = (make-instance 'material-evaluator))
         (let* ((state (make-initial-state)))
           (evaluation* evaluator state)
           (labels ((recur (state depth)
@@ -252,9 +252,9 @@
                             (move (random-elt moves))
                             (breadcrumb (apply-move state move)))
                        (evaluation+ evaluator state move breadcrumb)
-                       (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))
+                       (assert-equal (material-evaluation state moves) (evaluation? evaluator state moves))
                        (recur state (1- depth))
-                       (assert-equal (material-evaluation nil state) (evaluation? evaluator state moves))
+                       (assert-equal (material-evaluation state moves) (evaluation? evaluator state moves))
                        (evaluation- evaluator state move breadcrumb)
                        (unapply-move state breadcrumb))))
             (recur state 20)))))
@@ -409,6 +409,6 @@
     ;; some things changed since this state dump, but it shouldn't have changed the hashes
     (assert-equal (state-hash state) (zobrist-hash state))
     (multiple-value-bind (move value)
-        (minimax-decision (copy-state state))
+        (minimax-decision (copy-state state) (make-simple-evaluator #'material-evaluation))
       (declare (ignore move))
       (assert-equal *evaluation-maximum* value))))
