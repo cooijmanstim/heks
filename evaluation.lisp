@@ -170,8 +170,3 @@
 
 (defun make-heuristic-evaluator ()
   (make-evaluator :getter #'heuristic-evaluation))
-
-
-
-
-

@@ -40,7 +40,6 @@
 ;; but then collisions can happen, and stored information may be invalid.  if
 ;; the stored move is invalid (highly likely), conditions will occur.
 ;; if the stored move is valid, we can still use it for move ordering.
-;; TODO: measure collision rate
 (defstruct transposition
   (depth 0 :type fixnum)
   (value 0 :type evaluation)
@@ -50,7 +49,7 @@
 (defparameter *transposition-table* nil)
 (defparameter *transposition-table-size-estimate* 1000000)
 ;; store only deep transpositions to save memory.  shallow transpositions are used much more
-;; often, but there are many more of them.  TODO: handle out of memory properly
+;; often, but there are many more of them.
 (defparameter *transposition-minimum-depth* 2)
 (declaim (fixnum *transposition-minimum-depth*))
 
@@ -314,27 +313,33 @@
     (with-slots ((m move) (p parent) untried-moves last-player state-hash) node
       (setf m move
             p parent
-            untried-moves (moves state) ;; TODO: (lookup-moves state :generate nil)?
+            untried-moves (if *moves-cache*
+                              (lookup-moves state)
+                              (moves state))
             last-player (opponent (state-player state))
             state-hash (state-hash state)))
     node))
 
-(defun mcts-node-uct-child (node)
-  (with-slots (children (parent-nvisits nvisits)) node
-    (labels ((uct-score (node)
-               (with-slots (nwins nvisits) node
-                   (+ (/ nwins nvisits)
-                      (sqrt (/ (* 2 (log parent-nvisits))
-                               nvisits))))))
-      (extremum children #'> :key #'uct-score))))
+(defun mcts-node-uct-child (parent)
+  (with-slots (children (parent-nvisits nvisits)) parent
+    (if (zerop parent-nvisits)
+      (random-elt children)
+      (labels ((uct-score (child)
+                 (+ (mcts-node-win-rate child)
+                    (sqrt (/ (* 2 (log parent-nvisits)
+                                (mcts-node-nvisits child)))))))
+        (extremum children #'> :key #'uct-score)))))
 
 (defun mcts-node-best-child (node)
   ;; TODO: optimize
   (extremum (mcts-node-children node) #'> :key #'mcts-node-nvisits))
 
+(declaim (ftype (function (mcts-node) single-float) mcts-node-win-rate))
 (defun mcts-node-win-rate (node)
   (with-slots (nwins nvisits) node
-    (coerce (/ nwins nvisits) 'single-float)))
+    (if (zerop nvisits)
+        0.5
+        (coerce (/ nwins nvisits) 'single-float))))
 
 (defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
@@ -363,13 +368,16 @@
         (apply-move state (mcts-node-move node)))
   node)
 
+(defparameter *mcts-expansion-rate* 2)
+
 (defun mcts-expand (node state)
-  (with-slots (untried-moves) node
-    (unless (emptyp untried-moves)
-      (let ((move (random-elt untried-moves)))
-        (apply-move state move)
-        (setf node (mcts-add-child node move state)))))
-  node)
+  (dotimes (i *mcts-expansion-rate*)
+    (with-slots (untried-moves) node
+      (unless (emptyp untried-moves)
+        (let ((move (random-elt untried-moves)))
+          (apply-move state move)
+          (setf node (mcts-add-child node move state)))))
+    node))
 
 (defun mcts-rollout (state)
   (iter (for moves = (moves state))
@@ -416,14 +424,16 @@
   (declare (ignore breadcrumb))
   (with-slots (current-node) tree
     ;; traverse the list of children to find the node with the appropriate state-hash
-    ;; (can't really do this cheaper without keeping a map of some sort. not sure if
-    ;; that is cheaper; there are less than twenty moves on average.)
+    ;; (can't really do this more cheaply without keeping a map of some sort. not sure
+    ;; if that is cheaper; there are fewer than twenty moves on average.)
     (dolist (child (mcts-node-children current-node))
       (when (= (state-hash state) (mcts-node-state-hash child))
         (setf current-node child)
+        (mcts-sample current-node state)
         (return-from update-pmcts-tree tree)))
     ;; if we get here, the node hasn't been expanded yet.  do so.
-    (setf current-node (mcts-add-child current-node move state)))
+    (setf current-node (mcts-add-child current-node move state))
+    (mcts-sample current-node state))
   tree)
 
 (defun downdate-pmcts-tree (tree state move breadcrumb)
@@ -432,11 +442,15 @@
     (setf current-node (mcts-node-parent current-node)))
   tree)
 
-(defparameter *mcts-evaluation-support-mean*        0)
+(defparameter *mcts-evaluation-support-mean*        0.0)
 (defparameter *mcts-evaluation-support-sample-size* 0)
+(declaim (single-float *mcts-evaluation-support-mean*)
+         (fixnum *mcts-evaluation-support-sample-size*))
 
+(declaim (ftype (function * evaluation) get-mcts-evaluation))
 (defun get-mcts-evaluation (tree state moves)
-  (declare (ignore moves))
+  (declare (ignore moves)
+           (optimize (speed 3) (safety 1)))
   (with-slots (current-node) tree
     (assert (= (state-hash state) (mcts-node-state-hash current-node)))
     ;; take one sample -- with results from previous turns this should be enough
