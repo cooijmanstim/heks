@@ -258,11 +258,9 @@
                  (break))
                (return (values alpha principal-variation))))))))
   
-(defun minimax-decision (state &key (updater #'no-op) (committer #'no-op) (evaluator (make-material-evaluator)) (verbose t))
+(defun minimax-decision (state &key (evaluator (make-material-evaluator)) (verbose t))
   (let ((moves (moves (copy-state state))))
     (when (= (length moves) 1)
-      (funcall updater (first moves))
-      (funcall committer)
       (return-from minimax-decision (first moves))))
   (sb-ext:gc :full t)
   (unwind-protect
@@ -275,20 +273,15 @@
              (state (copy-state state)))
          (catch :out-of-time
            (iter (for max-depth from 0 below *minimax-maximum-depth*)
-                 (unwind-protect
-                      (progn
-                        (evaluation* evaluator state)
-                        (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
-                        (print (list max-depth value variation)))
-                   (unless *out-of-time*
-                     (funcall updater (first variation))))))
+                 (evaluation* evaluator state)
+                 (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
+                 (print (list max-depth value variation))))
          (let ((table-statistics
                 (list :ply-nkillers (map 'vector #'length *killer-table*))))
            (when verbose
              (print (list variation *minimax-statistics* table-statistics)))
            (maxf *transposition-table-size-estimate* (table-size *transposition-table*))
            (maxf *moves-cache-size-estimate*         (table-size *moves-cache*))
-           (funcall committer)
            (values (first variation) value)))
     (sb-ext:gc :full t)))
 
@@ -419,7 +412,7 @@
   (assert (= (state-hash state) (mcts-node-state-hash (pmcts-tree-current-node tree))))
   tree)
 
-(defun update-mcts-evaluation (tree state move breadcrumb)
+(defun update-pmcts-tree (tree state move breadcrumb)
   (declare (ignore breadcrumb))
   (with-slots (current-node) tree
     ;; traverse the list of children to find the node with the appropriate state-hash
@@ -428,12 +421,12 @@
     (dolist (child (mcts-node-children current-node))
       (when (= (state-hash state) (mcts-node-state-hash child))
         (setf current-node child)
-        (return-from update-mcts-evaluation tree)))
+        (return-from update-pmcts-tree tree)))
     ;; if we get here, the node hasn't been expanded yet.  do so.
     (setf current-node (mcts-add-child current-node move state)))
   tree)
 
-(defun downdate-mcts-evaluation (tree state move breadcrumb)
+(defun downdate-pmcts-tree (tree state move breadcrumb)
   (declare (ignore state move breadcrumb))
   (with-slots (current-node) tree
     (setf current-node (mcts-node-parent current-node)))
@@ -450,6 +443,6 @@
 (defun make-mcts-evaluator (state)
   (make-evaluator :data (make-pmcts-tree-for-state state)
                   :initializer #'initialize-mcts-evaluation
-                  :updater #'update-mcts-evaluation
-                  :downdater #'downdate-mcts-evaluation
+                  :updater #'update-pmcts-tree
+                  :downdater #'downdate-pmcts-tree
                   :getter #'get-mcts-evaluation))

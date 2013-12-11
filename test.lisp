@@ -51,25 +51,6 @@
     (far-pop l)
     (assert-equal '(1) l)))
 
-;; only makes sense if using a linear-array representation for board
-'(define-test board-rmi->ij
-  (iter (repeat 5)
-        (with board = (make-initial-board))
-        (for ij = (vmap #'random *board-dimensions*))
-        (assert-equality #'v= ij (board-rmi->ij board (linear-array-index board (s1 ij) (s2 ij))))))
-
-(define-test linear-array-transform
-  (let ((larray (make-linear-array '(2 2)))
-        (indices '(0 1 2 3))
-        (subscriptss '((0 0) (0 1) (1 0) (1 1))))
-    (assert-equal 4 (linear-array-size larray))
-    (iter (for index in indices)
-          (for subscripts in subscriptss)
-          (assert-equal index (apply #'linear-array-index larray subscripts))
-          (assert-equal subscripts (linear-array-subscripts larray index))
-          (assert-equal index (apply #'linear-array-index larray (linear-array-subscripts larray index)))
-          (assert-equal subscripts (linear-array-subscripts larray (apply #'linear-array-index larray subscripts))))))
-
 (define-test board-screen-transform
   (iter (repeat 5)
         (for ij = (vmap #'random *board-dimensions*))
