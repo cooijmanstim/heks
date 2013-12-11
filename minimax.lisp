@@ -104,13 +104,6 @@
   (node-count 0 :type fixnum))
 (defparameter *minimax-statistics* nil)
 
-;; XXX: mean and n are places that are evaluated more than once
-(defmacro update-running-average (mean n newvalue)
-  `(progn
-     (setf ,mean (+ (* (/ ,n (+ 1.0 ,n)) ,mean)
-                    (* (/  1 (+ 1.0 ,n)) ,newvalue)))
-     (incf ,n)))
-
 (declaim (inline measure-branching-factor
                  measure-moves
                  measure-node))
