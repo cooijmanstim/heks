@@ -107,7 +107,8 @@
                       (update-move (decide agent state))
                       (setf agent-deciding nil)
                       (commit-move)
-                      (sb-thread:thread-yield))
+                      ;; sleeping here helps avoid threading issues
+                      (sleep 0.1))
                     :name "worker thread"))
                  (fresh-move ()
                    (setf submove '()
@@ -171,7 +172,9 @@
                     (unless agent-deciding (agent-move :mcts)))
                    ((sdl:key= key :sdl-key-f12)
                     ;; trigger debugger
-                    (break))))
+                    (break))
+                   ((sdl:key= key :sdl-key-escape)
+                    (setf manual-operation t))))
             (:mouse-button-up-event
              (:button button :x x :y y)
              (cond ((= button sdl:sdl-button-left)
@@ -185,6 +188,12 @@
   (profile (lambda ()
              (time-limited 30 (lambda ()
                                 (minimax-decision (make-initial-state)))))))
+
+(defun profile-mcts-minimax ()
+  (profile (lambda ()
+             (time-limited 30 (lambda ()
+                                (let ((state (make-initial-state)))
+                                  (minimax-decision state :evaluator (make-mcts-evaluator state))))))))
 
 (defun profile-mcts ()
   (profile (lambda ()

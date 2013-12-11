@@ -432,12 +432,18 @@
     (setf current-node (mcts-node-parent current-node)))
   tree)
 
+(defparameter *mcts-evaluation-support-mean*        0)
+(defparameter *mcts-evaluation-support-sample-size* 0)
+
 (defun get-mcts-evaluation (tree state moves)
   (declare (ignore moves))
   (with-slots (current-node) tree
     (assert (= (state-hash state) (mcts-node-state-hash current-node)))
     ;; take one sample -- with results from previous turns this should be enough
     (mcts-sample current-node state)
+    (update-running-average *mcts-evaluation-support-mean*
+                            *mcts-evaluation-support-sample-size*
+                            (mcts-node-nvisits current-node))
     (round (* 100 (- (mcts-node-win-rate (mcts-node-best-child current-node)) 0.5)))))
 
 (defun make-mcts-evaluator (state)
