@@ -23,16 +23,11 @@
           all-moves submove supermoves
           ;; t if one of the agents is thinking
           agent-deciding
+          ;; have to communicate agent decision through sdl:push-user-event which only
+          ;; takes primitives
+          incoming-move (incoming-move-code 1)
           ;; t initially and after undo (human took over)
-          (manual-operation t)
-          ;; can be called upon by human
-          (all-agents `((:minimax-material  ,(make-instance 'minimax-agent
-                                                            :evaluator (make-instance 'simple-evaluator
-                                                                                      :function #'material-evaluation)))
-                        (:minimax-heuristic ,(make-instance 'minimax-agent
-                                                            :evaluator (make-instance 'simple-evaluator
-                                                                                      :function #'heuristic-evaluation)))
-                        (:mcts              ,(make-instance 'pmcts-agent :tree (make-pmcts-tree-for-state state))))))
+          (manual-operation t))
       (sdl:with-init ()
         (labels ((redraw ()
                    (sdl:clear-display *background-color*)
@@ -45,22 +40,16 @@
                  (current-agent-move ()
                    (when-let ((agent (game-current-agent game)))
                      (agent-move agent)))
-                 (agent-move (agent &aux (agent-designator agent))
+                 (agent-move (agent)
                    (setf agent-deciding t)
                    (redraw)
-                   (when (keywordp agent)
-                     (setf agent (second (assoc agent all-agents))))
-                   (unless agent
-                     (fresh-line)
-                     (format t "unknown agent: ~A" agent-designator))
                    (sb-thread:make-thread
                     (lambda ()
-                      ;; technically unsafe, but the consequences are mild
-                      (update-move (decide agent state))
-                      (setf agent-deciding nil)
-                      (commit-move)
-                      ;; sleeping here helps avoid threading issues
-                      (sleep 0.1))
+                      (setf incoming-move (decide agent state))
+                      (sdl:push-user-event :code incoming-move-code
+                                           ;; mom! dad! it's evil! don't touch it!
+                                           :data1 (cffi:make-pointer 0)
+                                           :data2 (cffi:make-pointer 0)))
                     :name "worker thread"))
                  (fresh-move ()
                    (setf submove '()
@@ -116,14 +105,6 @@
                     (unless agent-deciding (let-the-games-begin)))
                    ((sdl:key= key :sdl-key-f1)
                     (unless agent-deciding (current-agent-move)))
-                   ((sdl:key= key :sdl-key-f5)
-                    (unless agent-deciding (agent-move :minimax-material)))
-                   ((sdl:key= key :sdl-key-f6)
-                    (unless agent-deciding (agent-move :minimax-heuristic)))
-                   ((sdl:key= key :sdl-key-f7)
-                    (unless agent-deciding (agent-move :minimax-mcts)))
-                   ((sdl:key= key :sdl-key-f8)
-                    (unless agent-deciding (agent-move :mcts)))
                    ((sdl:key= key :sdl-key-f12)
                     ;; trigger debugger
                     (break))
@@ -135,6 +116,12 @@
                     (unless agent-deciding (update-move (append submove (list (board-position (v x y)))))))
                    ((= button sdl:sdl-button-right)
                     (unless agent-deciding (update-move (butlast submove 1))))))
+            (:user-event
+             (:code code)
+             (cond ((= code incoming-move-code)
+                    (update-move incoming-move)
+                    (setf agent-deciding nil)
+                    (commit-move))))
             (:video-expose-event () (sdl:update-display))))))))
 
 
