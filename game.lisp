@@ -145,28 +145,40 @@
            (type board board)
            (v ij))
   (let ((opponent (opponent player)))
-    (labels ((recur (ij capture-ijs &aux captures)
-               (declare (optimize (speed 3) (safety 0))
-                        (v ij))
-               (dolist (didj *all-directions*)
-                 (declare (v didj))
-                 ;; ij of the tile that is jumped over
-                 (let ((capture-ij (v+v ij didj)))
-                   ;; don't jump over the same piece twice
-                   (unless (member capture-ij capture-ijs :test #'v=)
-                     (with-slots (object owner) (board-tile board capture-ij)
-                       (when (eq owner opponent)
-                         (assert (member object '(:man :king)))
-                         ;; ij of the tile that we land on
-                         (let ((land-ij (v+v capture-ij didj)))
-                           (when (tile-empty-p board land-ij)
-                             ;; maybe continue jumping elsewhere
-                             (if-let ((continuations (recur land-ij (cons capture-ij capture-ijs))))
-                               (dolist (continuation continuations)
-                                 (push (cons ij continuation) captures))
-                               (push (list ij land-ij) captures)))))))))
-               captures))
-      (recur ij '()))))
+    (macrolet ((partially-inlined-recur (k)
+                 (labels ((make-definition (name callee-name)
+                            (unless callee-name
+                              ;; make the indefinitely recursive definition
+                              (setf callee-name name))
+                            `(,name (ij capture-ijs &aux captures)
+                                    (declare (optimize (speed 3) (safety 0))
+                                             (v ij))
+                                    (dolist (didj *all-directions*)
+                                      (declare (v didj))
+                                      ;; ij of the tile that is jumped over
+                                      (let ((capture-ij (v+v ij didj)))
+                                        ;; don't jump over the same piece twice
+                                        (unless (member capture-ij capture-ijs :test #'v=)
+                                          (with-slots (object owner) (board-tile board capture-ij)
+                                            (when (eq owner opponent)
+                                              (assert (member object '(:man :king)))
+                                              ;; ij of the tile that we land on
+                                              (let ((land-ij (v+v capture-ij didj)))
+                                                (when (tile-empty-p board land-ij)
+                                                  ;; maybe continue jumping elsewhere
+                                                  (if-let ((continuations (,callee-name land-ij (cons capture-ij capture-ijs))))
+                                                    (dolist (continuation continuations)
+                                                      (push (cons ij continuation) captures))
+                                                    (push (list ij land-ij) captures)))))))))
+                                    captures)))
+                   (let ((names (loop for i from 0 below k
+                                   collect (gensym "k-inline-"))))
+                     `(labels ,(maplist (lambda (rest-names)
+                                          (make-definition (first rest-names) (second rest-names)))
+                                        names)
+                        (declare (inline ,@(butlast names)))
+                        (,(first names) ij '()))))))
+      (partially-inlined-recur 5))))
 
 (defun piece-captures-flying (board ij player)
   (declare (optimize (speed 3) (safety 0))
