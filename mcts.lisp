@@ -51,7 +51,7 @@
 (defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
     (with-slots (untried-moves children) parent
-      (deletef move untried-moves :test #'move-equal)
+      (deletef untried-moves move :test #'move-equal)
       (push node children))
     node))
 
