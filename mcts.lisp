@@ -6,8 +6,8 @@
   (move nil)
   (parent nil :type (or null mcts-node))
   (children '() :type list)
-  (nwins 0 :type integer)
-  (nvisits 0 :type integer)
+  (nwins 0 :type (integer 0))
+  (nvisits 0 :type (integer 0))
   (untried-moves '() :type list)
   (last-player nil :type (or null player))
   (state-hash 0 :type zobrist-hash))
@@ -25,14 +25,16 @@
     node))
 
 (defun mcts-node-uct-child (parent)
+  (declare (optimize (speed 3) (safety 1)))
   (with-slots (children (parent-nvisits nvisits)) parent
-    (if (zerop parent-nvisits)
+    (declare (type (integer 0) parent-nvisits))
+    (if (= parent-nvisits 0)
       (random-elt children)
-      (labels ((uct-score (child)
-                 (+ (mcts-node-win-rate child)
-                    (sqrt (/ (* 2 (log parent-nvisits)
-                                (mcts-node-nvisits child)))))))
-        (extremum children #'> :key #'uct-score)))))
+      (iter (for child in children)
+            (for uct-score = (+ (mcts-node-win-rate child)
+                                (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
+                                         (mcts-node-nvisits child)))))
+            (finding child maximizing uct-score)))))
 
 (defun mcts-node-best-child (node)
   ;; TODO: optimize
