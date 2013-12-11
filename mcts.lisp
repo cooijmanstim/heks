@@ -31,7 +31,7 @@
     (if (= parent-nvisits 0)
       (random-elt children)
       (iter (for child in children)
-            (for uct-score = (+ (mcts-node-win-rate child)
+            (for uct-score = (+ (mcts-node-win-probability child)
                                 (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
                                          ;; race conditions make it possible for child-nvisits to be 0 here
                                          (+ 1e-4 (mcts-node-nvisits child))))))
@@ -42,12 +42,16 @@
   (iter (for child in (mcts-node-children node))
         (finding child maximizing (mcts-node-nvisits child))))
 
-(declaim (ftype (function (mcts-node) single-float) mcts-node-win-rate))
-(defun mcts-node-win-rate (node)
+;; pretend that each node has *prior-nvisits* additional visits, half of which
+;; are wins.  this acts somewhat like a prior of 0.5 on the winning
+;; probability.
+(defparameter *prior-nvisits* 100)
+
+(declaim (ftype (function (mcts-node) single-float) mcts-node-win-probability))
+(defun mcts-node-win-probability (node)
   (with-slots (nwins nvisits) node
-    (if (zerop nvisits)
-        0.5
-        (coerce (/ nwins nvisits) 'single-float))))
+    (/ (+ nwins   (* 0.5 *prior-nvisits*))
+       (+ nvisits *prior-nvisits*))))
 
 (defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
@@ -103,7 +107,6 @@
         (mcts-update node winner)
         (setf node (mcts-node-parent node))))
 
-(defparameter *mcts-maximum-depth* 200)
 (defun mcts-decision (root-state &key (root-node (make-mcts-node root-state)) (max-sample-size most-positive-fixnum) (verbose t))
   (assert (not (state-endp root-state)))
   (iter (repeat max-sample-size)
@@ -111,7 +114,7 @@
         (mcts-sample root-node root-state))
   (let* ((best-child (mcts-node-best-child root-node))
          (move (mcts-node-move best-child))
-         (value (mcts-node-win-rate best-child)))
+         (value (mcts-node-win-probability best-child)))
     (when verbose
       (print (list :nsamples (mcts-node-nvisits root-node) :value value :move move)))
     (values move value)))
