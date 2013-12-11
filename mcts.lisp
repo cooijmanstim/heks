@@ -35,8 +35,9 @@
             (finding child maximizing uct-score)))))
 
 (defun mcts-node-best-child (node)
-  ;; TODO: optimize
-  (extremum (mcts-node-children node) #'> :key #'mcts-node-nvisits))
+  (declare (optimize (speed 3) (safety 1)))
+  (iter (for child in (mcts-node-children node))
+        (finding child maximizing (mcts-node-nvisits child))))
 
 (declaim (ftype (function (mcts-node) single-float) mcts-node-win-rate))
 (defun mcts-node-win-rate (node)
