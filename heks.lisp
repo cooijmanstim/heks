@@ -135,6 +135,5 @@
 (defun profile-agent (agent)
   (let ((state (make-initial-state)))
     (initialize agent state)
-    (time-limited 30 (lambda ()
-                       (profile (lambda ()
-                                  (loop (decide agent state))))))))
+    (profile (lambda ()
+               (decide agent state :time 30)))))

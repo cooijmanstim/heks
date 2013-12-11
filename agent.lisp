@@ -10,7 +10,7 @@
   (:method ((agent agent) state move breadcrumb)))
 (defgeneric downdate (agent state move breadcrumb)
   (:method ((agent agent) state move breadcrumb)))
-(defgeneric decide (agent state))
+(defgeneric decide (agent state &key time))
 
 (defclass minimax-agent (agent)
   ((evaluator :type evaluator
@@ -26,10 +26,12 @@
 (defmethod downdate ((agent minimax-agent) state move breadcrumb)
   (evaluation- (minimax-agent-evaluator agent) state move breadcrumb))
 
-(defmethod decide ((agent minimax-agent) state)
+(defmethod decide ((agent minimax-agent) state &key (time 10))
   ;; TODO: use an instance variable instead of global *out-of-time*
-  (time-limited 10 (lambda ()
-                     (minimax-decision state (minimax-agent-evaluator agent)))))
+  ;; TODO: judge amount of time needed
+  (time-limited time
+                (lambda ()
+                  (minimax-decision state (minimax-agent-evaluator agent)))))
 
 (defclass pmcts-agent (agent)
   ((tree :type pmcts-tree
@@ -45,7 +47,8 @@
 (defmethod downdate ((agent pmcts-agent) state move breadcrumb)
   (downdate-pmcts-tree (pmcts-agent-tree agent) state move breadcrumb))
 
-(defmethod decide ((agent pmcts-agent) state)
-  (time-limited 10 (lambda ()
-                     (mcts-decision state :root-node (pmcts-tree-current-node (pmcts-agent-tree agent))))))
+(defmethod decide ((agent pmcts-agent) state &key (time 10))
+  (time-limited time
+                (lambda ()
+                  (mcts-decision state :root-node (pmcts-tree-current-node (pmcts-agent-tree agent))))))
 
