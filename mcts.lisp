@@ -31,30 +31,36 @@
 
 (declaim (ftype (function (mcts-node) single-float) mcts-node-win-probability))
 (defun mcts-node-win-probability (node)
-  (with-slots (nwins nvisits) node
+  (let ((nwins (mcts-node-nwins node))
+        (nvisits (mcts-node-nvisits node)))
     (/ (+ nwins   (* 0.5 *prior-nvisits*))
        (+ nvisits *prior-nvisits*))))
 
 ;; use the plain win-rate in uct computations
 (declaim (ftype (function (mcts-node) single-float) mcts-node-win-rate))
 (defun mcts-node-win-rate (node)
-  (with-slots (nwins nvisits) node
+  (let ((nwins (mcts-node-nwins node))
+        (nvisits (mcts-node-nvisits node)))
     (if (zerop nvisits)
-      0.5
-      (coerce (/ (+ nwins) (+ nvisits)) 'single-float))))
+        0.5
+        (coerce (/ (+ nwins) (+ nvisits)) 'single-float))))
 
 (defun mcts-node-uct-child (parent)
   (declare (optimize (speed 3) (safety 1)))
-  (with-slots (children (parent-nvisits nvisits)) parent
+  (let ((children (mcts-node-children parent))
+        (parent-nvisits (mcts-node-nvisits parent)))
     (declare (type (integer 0) parent-nvisits))
     (if (= parent-nvisits 0)
-      (random-elt children)
-      (iter (for child in children)
-            (for uct-score = (+ (mcts-node-win-rate child)
-                                (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
-                                         ;; race conditions make it possible for child-nvisits to be 0 here
-                                         (+ 1e-4 (mcts-node-nvisits child))))))
-            (finding child maximizing uct-score)))))
+        ;; this case happens when the node is added by another thread but
+        ;; that thread is not yet done with the first rollout. the children
+        ;; will be in place though.
+        (random-elt children)
+        (iter (for child in children)
+              (for uct-score = (+ (mcts-node-win-rate child)
+                                  (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
+                                           ;; race conditions make it possible for child-nvisits to be 0 here
+                                           (+ 1e-4 (mcts-node-nvisits child))))))
+              (finding child maximizing uct-score)))))
 
 (defun mcts-node-best-child (node)
   (declare (optimize (speed 3) (safety 1)))
@@ -63,13 +69,16 @@
 
 (defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
+    ;; due to concurrency, it is possible that the child for a certain move
+    ;; is added more than once.  the most recently added node will shadow
+    ;; the others (except where random-elt is used, but that is transient).
     (with-slots (untried-moves children) parent
       (deletef untried-moves move :test #'move-equal)
       (push node children))
     node))
 
 (defun mcts-update (node winner)
-  (with-slots (last-player nvisits nwins) node
+  (with-slots (nwins nvisits last-player) node
     (incf nvisits)
     (incf nwins (if (eq winner last-player)
                     1
@@ -98,7 +107,7 @@
 
 (defun mcts-expand (node state)
   (dotimes (i *mcts-expansion-rate* node)
-    (with-slots (untried-moves) node
+    (let ((untried-moves (mcts-node-untried-moves node)))
       (unless (emptyp untried-moves)
         (let ((move (random-elt untried-moves)))
           (apply-move state move)
@@ -162,26 +171,6 @@
 (defun pmcts-sample (tree state)
   (mcts-sample (slot-value tree 'current-node) state))
 
-;; set root-node to the levelth parent of current-node. the idea is that
-;; nodes above it can be GCed.  minimax-pmcts will crash when this is done
-;; and you then undo level moves.
-(defun pmcts-tree-uproot (tree level)
-  (with-slots (root-node current-node) tree
-    (let ((new-root-node (do ((i 0 (1+ i))
-                              (node current-node (or (mcts-node-parent node)
-                                                     node)))
-                             ((= i level) node))))
-      (setf root-node new-root-node)
-      (mcts-node-destroy-trunk new-root-node))))
-
-;; disconnect ancestors and siblings of node
-(defun mcts-node-destroy-trunk (node)
-  (let ((parent (mcts-node-parent node)))
-    (setf (mcts-node-parent node) nil)
-    (when parent
-      (deletef (mcts-node-children parent) node)
-      (mcts-node-destroy parent))))
-
 ;; disconnect everything
 (defun mcts-node-destroy (node)
   (declare (optimize (debug 0) (safety 1) (speed 3)))
@@ -193,3 +182,23 @@
       (mcts-node-destroy child))
     (when parent
       (mcts-node-destroy parent))))
+
+;; disconnect ancestors and siblings of node
+(defun mcts-node-destroy-trunk (node)
+  (let ((parent (mcts-node-parent node)))
+    (setf (mcts-node-parent node) nil)
+    (when parent
+      (deletef (mcts-node-children parent) node)
+      (mcts-node-destroy parent))))
+
+;; set root-node to the levelth parent of current-node. the idea is that
+;; nodes above it can be GCed.  minimax-pmcts will crash when this is done
+;; and you then undo level moves.
+(defun pmcts-tree-uproot (tree level)
+  (with-slots (root-node current-node) tree
+    (let ((new-root-node (do ((i 0 (1+ i))
+                              (node current-node (or (mcts-node-parent node)
+                                                     node)))
+                             ((= i level) node))))
+      (setf root-node new-root-node)
+      (mcts-node-destroy-trunk new-root-node))))
