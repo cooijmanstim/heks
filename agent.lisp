@@ -122,3 +122,115 @@
     (setf keep-pondering nil)
     (dolist (ponderer ponderers)
       (sb-thread:join-thread ponderer :default nil))))
+
+(defclass time-managing-agent (agent)
+  ((agent :initarg :agent)
+   (time-left :type single-float :initarg :total-time :initform most-positive-single-float)
+   (variance-mean :initform 0.0 :type single-float)
+   (variance-sample-size :initform 0 :type integer)
+   (moves-left-mean :initform 0.0 :type single-float)
+   (moves-left-sample-size :initform 0 :type integer)))
+
+(defparameter *tb-ma-sample-budget* 1000)
+(defparameter *tb-ma-sample-depth* 3)
+(defparameter *tb-ml-sample-budget* 100)
+
+(defun sample-material-advantages (state)
+  (let ((evaluator (make-instance 'material-evaluator))
+        (sample (make-array *tb-ma-sample-budget* :fill-pointer 0))
+        (state (copy-state state)))
+    (evaluation* evaluator state)
+    (iter (repeat *tb-ma-sample-budget*)
+          (iter (with breadcrumbs = '())
+                (with move-history = '())
+                (repeat *tb-ma-sample-depth*)
+                (for moves = (moves state))
+                (when (state-endp state)
+                  (finish))
+                (let* ((move (random-elt moves))
+                       (breadcrumb (apply-move state move)))
+                  (push breadcrumb breadcrumbs)
+                  (push move move-history)
+                  (evaluation+ evaluator state move breadcrumb))
+                (finally
+                 (vector-push (evaluation? evaluator state (moves state)) sample)
+                 (iter (for breadcrumb in breadcrumbs)
+                       (for move in move-history)
+                       (evaluation- evaluator state move breadcrumb)
+                       (unapply-move state breadcrumb)))))
+    sample))
+
+(defun symmetric-sigmoid (x)
+  (if (zerop x)
+      0
+      (/ x (1+ (abs x)))))
+
+;; keep a running average of playout lengths. overestimates due to running
+;; average inertia.
+(defun estimate-moves-left (agent state)
+  (with-slots (moves-left-mean moves-left-sample-size) agent
+    (iter (repeat *tb-ml-sample-budget*)
+          (for move-count = (iter (with state = (copy-state state))
+                                  (for moves = (moves state))
+                                  (until (emptyp moves))
+                                  (count t)
+                                  (apply-move state (random-elt moves))))
+          (update-running-average moves-left-mean moves-left-sample-size move-count))
+    moves-left-mean))
+
+(defun time-budget (agent state time-left)
+  (let* ((sample (sample-material-advantages state))
+         (variance (coerce (variance sample) 'single-float)))
+    (with-slots (variance-mean variance-sample-size) agent
+      (update-running-average variance-mean variance-sample-size variance)
+      (let* ((moves-left (estimate-moves-left agent state))
+             (mean-move-time (/ time-left moves-left))
+             (variance-fraction (/ variance (+ 1.0 variance-mean)))
+             ;; importance ranges from 1/2 (low variance) to 2 (high variance)
+             (importance (expt 2 (symmetric-sigmoid variance-fraction)))
+             (time-budget (* mean-move-time importance)))
+        (fresh-line)
+        (print (list :time-left time-left
+                     :variance variance
+                     :variance-mean variance-mean
+                     :moves-ahead-count moves-left
+                     :mean-move-time mean-move-time
+                     :variance-fraction variance-fraction
+                     :importance importance
+                     :time-budget time-budget))
+        time-budget))))
+
+(defmethod initialize ((agent time-managing-agent) state)
+  (with-slots ((inner-agent agent) time-left) agent
+    (initialize inner-agent state)
+    ;; initialize mean variance estimate
+    (dotimes (i 10)
+      (time-budget agent state time-left))))
+
+(defmethod decide ((agent time-managing-agent) state &key time)
+  (with-slots ((inner-agent agent) time-left) agent
+    (labels ((duration (t0 t1)
+               (coerce (/ (- t1 t0)
+                          internal-time-units-per-second)
+                       'single-float)))
+      (let (t0 t1 t2 decision)
+        (setf t0 (get-internal-real-time))
+        (unwind-protect
+             (progn
+               (setf time (or time (time-budget agent state time-left)))
+               (setf t1 (get-internal-real-time))
+               (setf decision (decide inner-agent state :time time)))
+          (setf t2 (get-internal-real-time))
+          (print (list :planning-time (duration t0 t1)
+                       :decision-time (duration t1 t2)))
+          (decf time-left (duration t0 t2)))
+        decision))))
+
+(defmethod update ((agent time-managing-agent) state move breadcrumb)
+  (update (slot-value agent 'agent) state move breadcrumb))
+
+(defmethod downdate ((agent time-managing-agent) state move breadcrumb)
+  (downdate (slot-value agent 'agent) state move breadcrumb))
+
+(defmethod cleanup ((agent time-managing-agent))
+  (cleanup (slot-value agent 'agent)))

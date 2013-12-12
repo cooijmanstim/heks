@@ -4,8 +4,13 @@
 
 (defun main ()
   (let ((game (make-game))
-        (agent (make-instance 'minimax-pmcts-agent)))
-    (game-add-agent game (make-instance 'minimax-agent :evaluator (make-instance 'material-evaluator)))
+        (agent (make-instance 'time-managing-agent
+                              :agent (make-instance 'minimax-pmcts-agent)
+                              :total-time (* 15 60))))
+    (game-add-agent game (make-instance 'time-managing-agent
+                                        :agent (make-instance 'minimax-agent
+                                                              :evaluator (make-instance 'material-evaluator))
+                                        :total-time (* 15 60)))
     (game-add-agent game agent)
     (unwind-protect
          (graphical-game game)
@@ -39,9 +44,7 @@
                    (current-agent-move))
                  (current-agent-move ()
                    (if-let ((agent (game-current-agent game)))
-                     (agent-move agent)
-                     ;; non-computer deciding, take time for gc
-                     (sb-ext:gc :full t)))
+                     (agent-move agent)))
                  (agent-move (agent)
                    (setf agent-deciding t)
                    (redraw)
@@ -77,6 +80,7 @@
                    (when (and submove
                               (set-equal (list submove) supermoves :test #'move-equal))
                      (game-update game submove)
+                     (sb-ext:gc :full t)
                      (fresh-move)
                      (unless manual-operation
                        (current-agent-move))
