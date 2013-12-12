@@ -27,13 +27,21 @@
 ;; pretend that each node has *prior-nvisits* additional visits, half of which
 ;; are wins.  this acts somewhat like a prior of 0.5 on the winning
 ;; probability.
-(defparameter *prior-nvisits* 100)
+(defparameter *prior-nvisits* 30)
 
 (declaim (ftype (function (mcts-node) single-float) mcts-node-win-probability))
 (defun mcts-node-win-probability (node)
   (with-slots (nwins nvisits) node
     (/ (+ nwins   (* 0.5 *prior-nvisits*))
        (+ nvisits *prior-nvisits*))))
+
+;; use the plain win-rate in uct computations
+(declaim (ftype (function (mcts-node) single-float) mcts-node-win-rate))
+(defun mcts-node-win-rate (node)
+  (with-slots (nwins nvisits) node
+    (if (zerop nvisits)
+      0.5
+      (coerce (/ (+ nwins) (+ nvisits)) 'single-float))))
 
 (defun mcts-node-uct-child (parent)
   (declare (optimize (speed 3) (safety 1)))
@@ -42,7 +50,7 @@
     (if (= parent-nvisits 0)
       (random-elt children)
       (iter (for child in children)
-            (for uct-score = (+ (mcts-node-win-probability child)
+            (for uct-score = (+ (mcts-node-win-rate child)
                                 (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
                                          ;; race conditions make it possible for child-nvisits to be 0 here
                                          (+ 1e-4 (mcts-node-nvisits child))))))
