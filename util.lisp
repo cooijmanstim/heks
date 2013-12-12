@@ -200,20 +200,14 @@
 ;; fn must poll *out-of-time* and return when it becomes true
 (defparameter *out-of-time* nil)
 (defun time-limited (duration fn)
-  (setq *out-of-time* nil)
-  (let ((timer-thread (sb-thread:make-thread
-                       (lambda ()
-                         (sleep duration)
-                         (setq *out-of-time* t)
-                         (sb-thread:thread-yield))
-                       :name "timer thread")))
+  (let ((timer (sb-ext:make-timer (lambda () (setf *out-of-time* t))
+                                  :name "time-limited timer"
+                                  :thread t)))
+    (sb-ext:schedule-timer timer duration)
     (unwind-protect
          (funcall fn)
-      ;; when the function finishes early, terminate the timer. this is
-      ;; technically not safe, but what could possibly go wrong?
-      (when (sb-thread:thread-alive-p timer-thread)
-        (sb-thread:terminate-thread timer-thread))
-      (setq *out-of-time* nil))))
+      (sb-ext:unschedule-timer timer)
+      (setf *out-of-time* nil))))
 
 (defun profile (fn)
   (sb-sprof:reset)
@@ -241,7 +235,6 @@
                                 ;; sigh.
                                 (coerce (read-from-string string) 'single-float))
                               (cl-ppcre:all-matches-as-strings "\\S+" line))
-
                       into rows)
           (finally
            (return (make-array (list (length rows) (length (first rows)))
