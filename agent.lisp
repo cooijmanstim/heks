@@ -1,7 +1,5 @@
 (in-package :heks)
 
-;; TODO: time
-
 (defclass agent () ())
 
 (defgeneric initialize (agent state)
@@ -29,8 +27,6 @@
   (evaluation- (minimax-agent-evaluator agent) state move breadcrumb))
 
 (defmethod decide ((agent minimax-agent) state &key (time 10))
-  ;; TODO: use an instance variable instead of global *out-of-time*
-  ;; TODO: judge amount of time needed
   (time-limited time
                 (lambda ()
                   (with-slots (evaluator) agent
@@ -55,7 +51,7 @@
                 (lambda ()
                   (mcts-decision state :root-node (pmcts-tree-current-node (pmcts-agent-tree agent))))))
 
-(defparameter *ponder-thread-count* 1)
+(defparameter *ponder-thread-count* 2)
 ;; for when we need to stop the ponderers gracefully
 (defparameter *keep-pondering* t)
 

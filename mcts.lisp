@@ -94,7 +94,7 @@
         (apply-move state (mcts-node-move node)))
   node)
 
-(defparameter *mcts-expansion-rate* 3)
+(defparameter *mcts-expansion-rate* 10)
 
 (defun mcts-expand (node state)
   (dotimes (i *mcts-expansion-rate* node)
