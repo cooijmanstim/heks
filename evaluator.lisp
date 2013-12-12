@@ -76,3 +76,6 @@
 
 (defun pmcts-evaluator-sample (evaluator state)
   (pmcts-sample (slot-value evaluator 'tree) state))
+
+(defun pmcts-evaluator-uproot (evaluator level)
+  (pmcts-tree-uproot (slot-value evaluator 'tree) level))

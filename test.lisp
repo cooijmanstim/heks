@@ -410,3 +410,21 @@
         (minimax-decision (copy-state state) (make-simple-evaluator #'material-evaluation))
       (declare (ignore move))
       (assert-equal *evaluation-maximum* value))))
+
+(define-test pmcts-uproot
+  (let* ((state (make-initial-state))
+         (tree (make-pmcts-tree-for-state state)))
+    (dotimes (i 1000)
+      (pmcts-sample tree state))
+    (iter (repeat 4)
+          (for move = (mcts-node-move (random-elt (mcts-node-children (pmcts-tree-current-node tree)))))
+          (for breadcrumb = (apply-move state move))
+          (update-pmcts-tree tree state move breadcrumb))
+    (let* ((original-root (pmcts-tree-root-node tree))
+           (expected-root (mcts-node-parent (pmcts-tree-current-node tree))))
+      (pmcts-tree-uproot tree 1)
+      ;; avoid comparing nodes directly because huge walls of text will be printed
+      (assert-false (eq original-root (pmcts-tree-root-node tree)))
+      (assert-true (eq expected-root (pmcts-tree-root-node tree)))
+      (assert-false (not (not (mcts-node-parent expected-root))))
+      (assert-true (null (mcts-node-children original-root))))))

@@ -101,7 +101,8 @@
   (call-next-method)
   (let* ((state (copy-state state))
          (node (mcts-child-for-state (slot-value agent 'current-node) state)))
-    (minimax-pmcts-refocus agent state node)))
+    (minimax-pmcts-refocus agent state node)
+    (pmcts-evaluator-uproot (slot-value agent 'evaluator) 2)))
 
 (defmethod downdate ((agent minimax-pmcts-agent) state move breadcrumb)
   (call-next-method)

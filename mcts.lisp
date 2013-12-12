@@ -24,6 +24,17 @@
             state-hash (state-hash state)))
     node))
 
+;; pretend that each node has *prior-nvisits* additional visits, half of which
+;; are wins.  this acts somewhat like a prior of 0.5 on the winning
+;; probability.
+(defparameter *prior-nvisits* 100)
+
+(declaim (ftype (function (mcts-node) single-float) mcts-node-win-probability))
+(defun mcts-node-win-probability (node)
+  (with-slots (nwins nvisits) node
+    (/ (+ nwins   (* 0.5 *prior-nvisits*))
+       (+ nvisits *prior-nvisits*))))
+
 (defun mcts-node-uct-child (parent)
   (declare (optimize (speed 3) (safety 1)))
   (with-slots (children (parent-nvisits nvisits)) parent
@@ -41,17 +52,6 @@
   (declare (optimize (speed 3) (safety 1)))
   (iter (for child in (mcts-node-children node))
         (finding child maximizing (mcts-node-nvisits child))))
-
-;; pretend that each node has *prior-nvisits* additional visits, half of which
-;; are wins.  this acts somewhat like a prior of 0.5 on the winning
-;; probability.
-(defparameter *prior-nvisits* 100)
-
-(declaim (ftype (function (mcts-node) single-float) mcts-node-win-probability))
-(defun mcts-node-win-probability (node)
-  (with-slots (nwins nvisits) node
-    (/ (+ nwins   (* 0.5 *prior-nvisits*))
-       (+ nvisits *prior-nvisits*))))
 
 (defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
@@ -153,3 +153,35 @@
 
 (defun pmcts-sample (tree state)
   (mcts-sample (slot-value tree 'current-node) state))
+
+;; set root-node to the levelth parent of current-node. the idea is that
+;; nodes above it can be GCed.  minimax-pmcts will crash when this is done
+;; and you then undo level moves.
+(defun pmcts-tree-uproot (tree level)
+  (with-slots (root-node current-node) tree
+    (let ((new-root-node (do ((i 0 (1+ i))
+                              (node current-node (or (mcts-node-parent node)
+                                                     node)))
+                             ((= i level) node))))
+      (setf root-node new-root-node)
+      (mcts-node-destroy-trunk new-root-node))))
+
+;; disconnect ancestors and siblings of node
+(defun mcts-node-destroy-trunk (node)
+  (let ((parent (mcts-node-parent node)))
+    (setf (mcts-node-parent node) nil)
+    (when parent
+      (deletef (mcts-node-children parent) node)
+      (mcts-node-destroy parent))))
+
+;; disconnect everything
+(defun mcts-node-destroy (node)
+  (declare (optimize (debug 0) (safety 1) (speed 3)))
+  (let ((parent (mcts-node-parent node))
+        (children (mcts-node-children node)))
+    (setf (mcts-node-parent node) nil)
+    (setf (mcts-node-children node) nil)
+    (dolist (child children)
+      (mcts-node-destroy child))
+    (when parent
+      (mcts-node-destroy parent))))
