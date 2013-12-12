@@ -12,10 +12,10 @@
       (cleanup agent))
     agent))
 
-;; TODO: handle end-of-game
 (defun graphical-game (&optional (game (let ((game (make-game)))
                                          (game-add-agent game nil)
                                          game)))
+  (declare (optimize (debug 3)))
   (with-slots (state) game
     (let (;; UI state: submove is the partial move constructed so far. all-moves
           ;; and supermoves respectively contain all legal moves and all legal
@@ -38,8 +38,10 @@
                    (setf manual-operation nil)
                    (current-agent-move))
                  (current-agent-move ()
-                   (when-let ((agent (game-current-agent game)))
-                     (agent-move agent)))
+                   (if-let ((agent (game-current-agent game)))
+                     (agent-move agent)
+                     ;; non-computer deciding, take time for gc
+                     (sb-ext:gc :full t)))
                  (agent-move (agent)
                    (setf agent-deciding t)
                    (redraw)

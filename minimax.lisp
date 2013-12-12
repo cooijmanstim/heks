@@ -252,25 +252,22 @@
   (let ((moves (moves (copy-state state))))
     (when (= (length moves) 1)
       (return-from minimax-decision (first moves))))
-  (sb-ext:gc :full t)
-  (unwind-protect
-       (let (value
-             variation
-             (*transposition-table* (make-transposition-table))
-             (*killer-table* (make-killers))
-             (*minimax-statistics* (make-minimax-statistics))
-             (*moves-cache* (make-moves-cache))
-             (state (copy-state state)))
-         (catch :out-of-time
-           (iter (for max-depth from 0 below *minimax-maximum-depth*)
-                 (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
-                 (print (list max-depth value variation))))
-         (let ((table-statistics
-                (list :ply-nkillers (map 'vector #'length *killer-table*))))
-           (when verbose
-             (print (list variation *minimax-statistics* table-statistics)))
-           (maxf *transposition-table-size-estimate* (table-size *transposition-table*))
-           (maxf *moves-cache-size-estimate*         (table-size *moves-cache*))
-           (values (first variation) value)))
-    (sb-ext:gc :full t)))
+  (let (value
+        variation
+        (*transposition-table* (make-transposition-table))
+        (*killer-table* (make-killers))
+        (*minimax-statistics* (make-minimax-statistics))
+        (*moves-cache* (make-moves-cache))
+        (state (copy-state state)))
+    (catch :out-of-time
+      (iter (for max-depth from 0 below *minimax-maximum-depth*)
+            (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
+            (print (list max-depth value variation))))
+    (let ((table-statistics
+           (list :ply-nkillers (map 'vector #'length *killer-table*))))
+      (when verbose
+        (print (list variation *minimax-statistics* table-statistics)))
+      (maxf *transposition-table-size-estimate* (table-size *transposition-table*))
+      (maxf *moves-cache-size-estimate*         (table-size *moves-cache*))
+      (values (first variation) value))))
 
