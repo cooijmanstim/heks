@@ -252,8 +252,8 @@
 ;; try to get a random element from list while the earth moves beneath our feet
 (defun random-list-elt (list)
   (if (emptyp list)
-      nil
+      (values nil nil)
       ;; we got hold of one cons, they won't take that from us anymore!!1
       (do (elt) (elt (values elt t))
-        (let ((length (length list)))
+        (let ((length (list-length list)))
           (setf elt (nth (random length) list))))))

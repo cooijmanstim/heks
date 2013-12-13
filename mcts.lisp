@@ -2,6 +2,10 @@
 
 (declaim (optimize (debug 3) (safety 3)))
 
+;; threads adding children simultaneously causes no end of trouble.  but don't store
+;; a lock on each node; that would eat too much memory.
+(defparameter *mcts-add-child-lock* (sb-thread:make-mutex :name "mcts-add-child-lock"))
+
 (defstruct (mcts-node (:constructor nil))
   (move nil)
   (parent nil :type (or null mcts-node))
@@ -74,9 +78,6 @@
 
 (defun mcts-add-child (parent move state)
   (let ((node (make-mcts-node state move parent)))
-    ;; due to concurrency, it is possible that the child for a certain move
-    ;; is added more than once.  the most recently added node will shadow
-    ;; the others (except where random-list-elt is used, but that is transient).
     (with-slots (untried-moves children) parent
       (deletef untried-moves move :test #'move-equal)
       (push node children))
@@ -111,22 +112,18 @@
 (defparameter *mcts-expansion-rate* 5)
 
 (defun mcts-expand (node state)
-  (dotimes (i *mcts-expansion-rate* node)
-    (let ((untried-moves (mcts-node-untried-moves node)))
-      (unless (emptyp untried-moves)
-        (let ((move (random-list-elt untried-moves)))
-          (cond (move
-                 (apply-move state move)
-                 (setf node (mcts-add-child node move state)))
-                (t
-                 ;; move was already taken by another thread. do select again.
-                 (setf node (mcts-select node state))
-                 (setf node (mcts-expand node state)))))))))
+  (sb-thread:with-mutex (*mcts-add-child-lock*)
+    (dotimes (i *mcts-expansion-rate* node)
+      (let ((untried-moves (mcts-node-untried-moves node)))
+        (unless (emptyp untried-moves)
+          (let ((move (random-elt untried-moves)))
+            (apply-move state move)
+            (setf node (mcts-add-child node move state))))))))
 
 (defun mcts-rollout (state)
   (iter (for moves = (moves state))
         (until (emptyp moves))
-        (apply-move state (random-list-elt moves)))
+        (apply-move state (random-elt moves)))
   (state-winner state))
 
 (defun mcts-backprop (node winner)

@@ -397,3 +397,15 @@
     (toggle-player state))
   (setf (state-endp state) nil))
 
+
+(defun state-dump (state filespec)
+  (with-open-file (stream filespec :direction :output :if-exists :supersede :if-does-not-exist :create)
+    (prin1 state stream))
+  (fresh-line)
+  (format t "state dumped to ~A" filespec))
+
+(defun state-load (filespec)
+  (with-open-file (stream filespec :direction :input)
+    (let ((state (read stream)))
+      (setf (state-hash state) (zobrist-hash state))
+      state)))

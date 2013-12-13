@@ -70,7 +70,7 @@
                  (integer support-sample-size))
         (with-slots (current-node) tree
           (assert (= (state-hash state) (mcts-node-state-hash current-node)))
-          (dotimes (i 100)
+          (dotimes (i (- 100 (mcts-node-nvisits current-node)))
             (mcts-sample current-node state))
           ;(when-let ((parent (mcts-node-parent current-node)))
           ;  (update-running-average support-mean support-sample-size (mcts-node-nvisits parent)))

@@ -81,6 +81,7 @@
                               (set-equal (list submove) supermoves :test #'move-equal))
                      (game-update game submove)
                      (sb-ext:gc :full t)
+                     (state-dump state (format nil "/home/tim/school/isg/~A" (gensym "STATE-DUMP-")))
                      (fresh-move)
                      (unless manual-operation
                        (current-agent-move))

@@ -128,7 +128,7 @@
 
 (defparameter *tb-ma-sample-budget* 1000)
 (defparameter *tb-ma-sample-depth* 5)
-(defparameter *tb-ml-sample-budget* 100)
+(defparameter *tb-ml-sample-budget* 500)
 
 (defun sample-material-advantages (state)
   (let ((material (make-running-material))
@@ -183,14 +183,14 @@
       (let* ((moves-left (estimate-moves-left agent state))
              (mean-move-time (/ time-left moves-left))
              (variance-difference (- variance variance-mean))
-             ;; importance ranges from 1/3 (low variance) to 3 (high variance)
-             (importance (expt 3 (symmetric-sigmoid variance-difference)))
+             ;; when moves-left >= 3, importance ranges from 1/3 (low variance) to 3 (high variance)
+             (importance (expt (min 3 moves-left) (symmetric-sigmoid variance-difference)))
              (time-budget (* mean-move-time importance)))
         (fresh-line)
         (print (list :time-left time-left
                      :variance variance
                      :variance-mean variance-mean
-                     :moves-ahead-count moves-left
+                     :moves-left moves-left
                      :mean-move-time mean-move-time
                      :variance-difference variance-difference
                      :importance importance
