@@ -25,14 +25,17 @@
 
 (defparameter *moves-cache-statistics* (vector 0 0)) ;; hits, misses
 
-(defun lookup-moves (state)
+(defun lookup-moves (state &key (storep t))
   (multiple-value-bind (moves presentp) (lookup *moves-cache* (state-hash state))
     (cond (presentp
            (incf (svref *moves-cache-statistics* 0))
            moves)
           (t
            (incf (svref *moves-cache-statistics* 1))
-           (setf (lookup *moves-cache* (state-hash state)) (moves state))))))
+           (let ((moves (moves state)))
+             (when storep
+               (setf (lookup *moves-cache* (state-hash state)) moves))
+             moves)))))
 
 ;; NOTE: we can use (state-hash state) rather than state as the hash-table key,
 ;; but then collisions can happen, and stored information may be invalid.  if

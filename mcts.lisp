@@ -18,7 +18,7 @@
       (setf m move
             p parent
             untried-moves (if *moves-cache*
-                              (copy-list (lookup-moves state))
+                              (copy-list (lookup-moves state :storep nil))
                               (moves state))
             last-player (opponent (state-player state))
             state-hash (state-hash state)))
@@ -45,22 +45,27 @@
         0.5
         (coerce (/ (+ nwins) (+ nvisits)) 'single-float))))
 
-(defun mcts-node-uct-child (parent)
+(defun mcts-node-uct (child parent-nvisits)
+  (if (= parent-nvisits 0)
+      ;; this case happens when the node is added by another thread but
+      ;; that thread is not yet done with the first rollout. the children
+      ;; will be in place though.
+      0
+      (+ (mcts-node-win-rate child)
+         (sqrt (/ (* 1/4 (log (the (integer 1) parent-nvisits)))
+                  ;; race conditions make it possible for child-nvisits to be 0 here
+                  (+ 1e-4 (mcts-node-nvisits child)))))))
+
+(defun mcts-node-select-child (parent)
   (declare (optimize (speed 3) (safety 1)))
   (let ((children (mcts-node-children parent))
         (parent-nvisits (mcts-node-nvisits parent)))
     (declare (type (integer 0) parent-nvisits))
     (if (= parent-nvisits 0)
-        ;; this case happens when the node is added by another thread but
-        ;; that thread is not yet done with the first rollout. the children
-        ;; will be in place though.
         (random-list-elt children)
         (iter (for child in children)
-              (for uct-score = (+ (mcts-node-win-rate child)
-                                  (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
-                                           ;; race conditions make it possible for child-nvisits to be 0 here
-                                           (+ 1e-4 (mcts-node-nvisits child))))))
-              (finding child maximizing uct-score)))))
+              (for score = (mcts-node-uct child parent-nvisits))
+              (finding child maximizing score)))))
 
 (defun mcts-node-best-child (node)
   (declare (optimize (speed 3) (safety 1)))
@@ -99,11 +104,11 @@
 (defun mcts-select (node state)
   (iter (while (and (emptyp (mcts-node-untried-moves node))
                     (not (emptyp (mcts-node-children node)))))
-        (setf node (mcts-node-uct-child node))
+        (setf node (mcts-node-select-child node))
         (apply-move state (mcts-node-move node)))
   node)
 
-(defparameter *mcts-expansion-rate* 10)
+(defparameter *mcts-expansion-rate* 5)
 
 (defun mcts-expand (node state)
   (dotimes (i *mcts-expansion-rate* node)
