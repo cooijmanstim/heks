@@ -63,6 +63,7 @@
 (defmethod evaluation? ((evaluator pmcts-evaluator) state moves)
   (declare (optimize (debug 3) (safety 1)))
   (if (null moves)
+      ;0
       *evaluation-minimum*
       (with-slots (tree support-mean support-sample-size) evaluator
         (declare (single-float support-mean)
@@ -71,6 +72,9 @@
           (assert (= (state-hash state) (mcts-node-state-hash current-node)))
           (dotimes (i 5)
             (mcts-sample current-node state))
+          ;(when-let ((parent (mcts-node-parent current-node)))
+          ;  (update-running-average support-mean support-sample-size (mcts-node-nvisits parent)))
+          ;(mcts-node-nvisits current-node)))))
           (update-running-average support-mean support-sample-size (mcts-node-nvisits current-node))
           (round (* 100 (- (mcts-node-win-probability (mcts-node-best-child current-node)) 0.5)))))))
 

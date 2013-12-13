@@ -124,18 +124,18 @@
    (time-left :type single-float :initarg :total-time :initform most-positive-single-float)
    (variance-mean :initform 0.0 :type single-float)
    (variance-sample-size :initform 0 :type integer)
-   (moves-left-mean :initform 0.0 :type single-float)
-   (moves-left-sample-size :initform 0 :type integer)))
+   (moves-left-mean :initform 0.0 :type single-float)))
 
 (defparameter *tb-ma-sample-budget* 1000)
-(defparameter *tb-ma-sample-depth* 3)
+(defparameter *tb-ma-sample-depth* 5)
 (defparameter *tb-ml-sample-budget* 100)
 
 (defun sample-material-advantages (state)
-  (let ((evaluator (make-instance 'material-evaluator))
+  (let ((material (make-running-material))
         (sample (make-array *tb-ma-sample-budget* :fill-pointer 0))
-        (state (copy-state state)))
-    (evaluation* evaluator state)
+        (state (copy-state state))
+        (player (state-player state)))
+    (initialize-running-material material state)
     (iter (repeat *tb-ma-sample-budget*)
           (iter (with breadcrumbs = '())
                 (with move-history = '())
@@ -147,12 +147,12 @@
                        (breadcrumb (apply-move state move)))
                   (push breadcrumb breadcrumbs)
                   (push move move-history)
-                  (evaluation+ evaluator state move breadcrumb))
+                  (update-running-material material state move breadcrumb))
                 (finally
-                 (vector-push (evaluation? evaluator state (moves state)) sample)
+                 (vector-push (get-material-advantage material player) sample)
                  (iter (for breadcrumb in breadcrumbs)
                        (for move in move-history)
-                       (evaluation- evaluator state move breadcrumb)
+                       (downdate-running-material material state move breadcrumb)
                        (unapply-move state breadcrumb)))))
     sample))
 
@@ -161,17 +161,18 @@
       0
       (/ x (1+ (abs x)))))
 
-;; keep a running average of playout lengths. overestimates due to running
-;; average inertia.
+;; keep a decaying average of playout lengths.  might overestimate due to inertia,
+;; but without it we drown in noise.
 (defun estimate-moves-left (agent state)
-  (with-slots (moves-left-mean moves-left-sample-size) agent
+  (with-slots (moves-left-mean) agent
     (iter (repeat *tb-ml-sample-budget*)
           (for move-count = (iter (with state = (copy-state state))
                                   (for moves = (moves state))
                                   (until (emptyp moves))
                                   (count t)
                                   (apply-move state (random-elt moves))))
-          (update-running-average moves-left-mean moves-left-sample-size move-count))
+          (setf moves-left-mean (+ (* 0.9 moves-left-mean)
+                                   (* 0.1 move-count))))
     moves-left-mean))
 
 (defun time-budget (agent state time-left)
@@ -181,9 +182,9 @@
       (update-running-average variance-mean variance-sample-size variance)
       (let* ((moves-left (estimate-moves-left agent state))
              (mean-move-time (/ time-left moves-left))
-             (variance-fraction (/ variance (+ 1.0 variance-mean)))
-             ;; importance ranges from 1/2 (low variance) to 2 (high variance)
-             (importance (expt 2 (symmetric-sigmoid variance-fraction)))
+             (variance-difference (- variance variance-mean))
+             ;; importance ranges from 1/3 (low variance) to 3 (high variance)
+             (importance (expt 3 (symmetric-sigmoid variance-difference)))
              (time-budget (* mean-move-time importance)))
         (fresh-line)
         (print (list :time-left time-left
@@ -191,7 +192,7 @@
                      :variance-mean variance-mean
                      :moves-ahead-count moves-left
                      :mean-move-time mean-move-time
-                     :variance-fraction variance-fraction
+                     :variance-difference variance-difference
                      :importance importance
                      :time-budget time-budget))
         time-budget))))

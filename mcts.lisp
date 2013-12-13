@@ -18,7 +18,7 @@
       (setf m move
             p parent
             untried-moves (if *moves-cache*
-                              (lookup-moves state)
+                              (copy-list (lookup-moves state))
                               (moves state))
             last-player (opponent (state-player state))
             state-hash (state-hash state)))
@@ -54,7 +54,7 @@
         ;; this case happens when the node is added by another thread but
         ;; that thread is not yet done with the first rollout. the children
         ;; will be in place though.
-        (random-elt children)
+        (random-list-elt children)
         (iter (for child in children)
               (for uct-score = (+ (mcts-node-win-rate child)
                                   (sqrt (/ (* 2 (log (the (integer 1) parent-nvisits)))
@@ -71,7 +71,7 @@
   (let ((node (make-mcts-node state move parent)))
     ;; due to concurrency, it is possible that the child for a certain move
     ;; is added more than once.  the most recently added node will shadow
-    ;; the others (except where random-elt is used, but that is transient).
+    ;; the others (except where random-list-elt is used, but that is transient).
     (with-slots (untried-moves children) parent
       (deletef untried-moves move :test #'move-equal)
       (push node children))
@@ -109,14 +109,19 @@
   (dotimes (i *mcts-expansion-rate* node)
     (let ((untried-moves (mcts-node-untried-moves node)))
       (unless (emptyp untried-moves)
-        (let ((move (random-elt untried-moves)))
-          (apply-move state move)
-          (setf node (mcts-add-child node move state)))))))
+        (let ((move (random-list-elt untried-moves)))
+          (cond (move
+                 (apply-move state move)
+                 (setf node (mcts-add-child node move state)))
+                (t
+                 ;; move was already taken by another thread. do select again.
+                 (setf node (mcts-select node state))
+                 (setf node (mcts-expand node state)))))))))
 
 (defun mcts-rollout (state)
   (iter (for moves = (moves state))
         (until (emptyp moves))
-        (apply-move state (random-elt moves)))
+        (apply-move state (random-list-elt moves)))
   (state-winner state))
 
 (defun mcts-backprop (node winner)
