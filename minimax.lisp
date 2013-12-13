@@ -8,6 +8,8 @@
   (make-hash-table :size size))
 (defun table-size (table)
   (hash-table-size table))
+(defun table-count (table)
+  (hash-table-count table))
 (declaim (inline lookup (setf lookup)))
 (defun lookup (table key)
   (multiple-value-bind (data presentp) (gethash key table)
@@ -18,10 +20,10 @@
   (setf (gethash key table) data))
 
 (defparameter *moves-cache* nil)
-(defparameter *moves-cache-size-estimate* 1000000)
+(defparameter *moves-cache-size-limit* 1000000)
 
 (defun make-moves-cache ()
-  (make-table :size *moves-cache-size-estimate*))
+  (make-table :size *moves-cache-size-limit*))
 
 (defparameter *moves-cache-statistics* (vector 0 0)) ;; hits, misses
 
@@ -33,7 +35,7 @@
           (t
            (incf (svref *moves-cache-statistics* 1))
            (let ((moves (moves state)))
-             (when storep
+             (when (and storep (< (table-count *moves-cache*) *moves-cache-size-limit*))
                (setf (lookup *moves-cache* (state-hash state)) moves))
              moves)))))
 
@@ -48,14 +50,14 @@
   (move nil :type list))
 (sb-ext:define-hash-table-test state-equal state-hash)
 (defparameter *transposition-table* nil)
-(defparameter *transposition-table-size-estimate* 1000000)
+(defparameter *transposition-table-size-limit* 1000000)
 ;; store only deep transpositions to save memory.  shallow transpositions are used much more
 ;; often, but there are many more of them.
 (defparameter *transposition-minimum-depth* 2)
 (declaim (fixnum *transposition-minimum-depth*))
 
 (defun make-transposition-table ()
-  (make-table :size *transposition-table-size-estimate*))
+  (make-table :size *transposition-table-size-limit*))
 
 (defun lookup-transposition (state &optional depth)
   (when-let ((transposition (lookup *transposition-table* (state-hash state))))
@@ -66,7 +68,8 @@
 (defun ensure-transposition (state)
   (if-let ((transposition (lookup *transposition-table* (state-hash state))))
     transposition
-    (setf (lookup *transposition-table* (state-hash state)) (make-transposition))))
+    (when (< (table-count *transposition-table*) *transposition-table-size-limit*)
+      (setf (lookup *transposition-table* (state-hash state)) (make-transposition)))))
 
 (defparameter *killer-table* nil)
 (defparameter *max-killers* 2)
@@ -163,22 +166,23 @@
                       (fixnum depth))
              ;; store transposition
              (when (>= depth *transposition-minimum-depth*)
-               (with-slots ((stored-depth depth)
-                            (stored-value value)
-                            (stored-type type)
-                            (stored-move move))
-                   (ensure-transposition state)
-                 ;; if the found value is outside or on the border of the search window,
-                 ;; it only proves a bound
-                 (cond ((<= value alpha)
-                        (setf stored-type :upper))
-                       ((<= beta value)
-                        (setf stored-type :lower))
-                       (t
-                        (setf stored-type :exact)))
-                 (setf stored-value value
-                       stored-depth depth
-                       stored-move (first variation))))))
+               (when-let ((transposition (ensure-transposition state)))
+                 (with-slots ((stored-depth depth)
+                              (stored-value value)
+                              (stored-type type)
+                              (stored-move move))
+                     transposition
+                   ;; if the found value is outside or on the border of the search window,
+                   ;; it only proves a bound
+                   (cond ((<= value alpha)
+                          (setf stored-type :upper))
+                         ((<= beta value)
+                          (setf stored-type :lower))
+                         (t
+                          (setf stored-type :exact)))
+                   (setf stored-value value
+                         stored-depth depth
+                         stored-move (first variation)))))))
     (maybe-use-transposition)
     ;; investigate the subtree
     ;; NOTE: moves are cached in *moves-cache* and collisions between states are possible.
@@ -270,7 +274,5 @@
            (list :ply-nkillers (map 'vector #'length *killer-table*))))
       (when verbose
         (print (list variation *minimax-statistics* table-statistics)))
-      (maxf *transposition-table-size-estimate* (table-size *transposition-table*))
-      (maxf *moves-cache-size-estimate*         (table-size *moves-cache*))
       (values (first variation) value))))
 

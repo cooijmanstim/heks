@@ -1,6 +1,6 @@
 (in-package :heks)
 
-(declaim (optimize (debug 3) (safety 3)))
+(declaim (optimize (speed 3) (safety 1) (space 2)))
 
 ;; threads adding children simultaneously causes no end of trouble.  but don't store
 ;; a lock on each node; that would eat too much memory.

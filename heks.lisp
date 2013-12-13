@@ -4,18 +4,19 @@
 
 (defun main ()
   (let ((game (make-game))
-        (agent (make-instance 'time-managing-agent
-                              :agent (make-instance 'minimax-pmcts-agent)
-                              :total-time (* 15 60))))
-    (game-add-agent game (make-instance 'time-managing-agent
+        (secret-weapon (make-instance 'time-managing-agent
+                                      :agent (make-instance 'minimax-pmcts-agent)
+                                      :total-time (* 15 60)))
+        (mediocre-weapon (make-instance 'time-managing-agent
                                         :agent (make-instance 'minimax-agent
                                                               :evaluator (make-instance 'material-evaluator))
-                                        :total-time (* 15 60)))
-    (game-add-agent game agent)
+                                        :total-time (* 15 60))))
+    (game-add-agent game mediocre-weapon)
+    (game-add-agent game secret-weapon)
     (unwind-protect
          (graphical-game game)
-      (cleanup agent))
-    agent))
+      (cleanup secret-weapon)
+      (cleanup mediocre-weapon))))
 
 (defun graphical-game (&optional (game (let ((game (make-game)))
                                          (game-add-agent game nil)
