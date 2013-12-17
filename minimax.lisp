@@ -20,7 +20,7 @@
   (setf (gethash key table) data))
 
 (defparameter *moves-cache* nil)
-(defparameter *moves-cache-size-limit* 1000000)
+(defparameter *moves-cache-size-limit* 20000000)
 
 (defun make-moves-cache ()
   (make-table :size *moves-cache-size-limit*))
@@ -50,7 +50,7 @@
   (move nil :type list))
 (sb-ext:define-hash-table-test state-equal state-hash)
 (defparameter *transposition-table* nil)
-(defparameter *transposition-table-size-limit* 1000000)
+(defparameter *transposition-table-size-limit* 20000000)
 ;; store only deep transpositions to save memory.  shallow transpositions are used much more
 ;; often, but there are many more of them.
 (defparameter *transposition-minimum-depth* 2)

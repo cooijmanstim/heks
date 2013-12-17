@@ -49,34 +49,35 @@
   ((tree :type pmcts-tree)
    ;; running average of number of samples informing evaluations
    (support-mean :initform 0.0 :type single-float)
-   (support-sample-size :initform 0 :type integer)))
+   (support-sample-size :initform 0 :type integer)
+   (prior-evaluation :initform (make-instance 'material-evaluator) :type evaluator)))
 
 (defmethod evaluation* ((evaluator pmcts-evaluator) state)
-  (setf (slot-value evaluator 'tree)
-        (make-pmcts-tree-for-state state)))
+  (setf (slot-value evaluator 'tree) (make-pmcts-tree-for-state state))
+  (evaluation* (slot-value evaluator 'prior-evaluation) state))
 
 (defmethod evaluation+ ((evaluator pmcts-evaluator) state move breadcrumb)
-  (update-pmcts-tree (slot-value evaluator 'tree) state move breadcrumb))
+  (update-pmcts-tree (slot-value evaluator 'tree) state move breadcrumb)
+  (evaluation+ (slot-value evaluator 'prior-evaluation) state move breadcrumb))
 (defmethod evaluation- ((evaluator pmcts-evaluator) state move breadcrumb)
-  (downdate-pmcts-tree (slot-value evaluator 'tree) state move breadcrumb))
+  (downdate-pmcts-tree (slot-value evaluator 'tree) state move breadcrumb)
+  (evaluation- (slot-value evaluator 'prior-evaluation) state move breadcrumb))
 
 (defmethod evaluation? ((evaluator pmcts-evaluator) state moves)
-  (declare (optimize (debug 3) (safety 1)))
+  (declare (optimize (speed 3) (safety 1)))
   (if (null moves)
-      ;0
       *evaluation-minimum*
       (with-slots (tree support-mean support-sample-size) evaluator
         (declare (single-float support-mean)
                  (integer support-sample-size))
         (with-slots (current-node) tree
           (assert (= (state-hash state) (mcts-node-state-hash current-node)))
-          (dotimes (i (- 100 (mcts-node-nvisits current-node)))
+          (dotimes (i (- 10 (mcts-node-nvisits current-node)))
             (mcts-sample current-node state))
-          ;(when-let ((parent (mcts-node-parent current-node)))
-          ;  (update-running-average support-mean support-sample-size (mcts-node-nvisits parent)))
-          ;(mcts-node-nvisits current-node)))))
           (update-running-average support-mean support-sample-size (mcts-node-nvisits current-node))
-          (round (* 100 (- (mcts-node-win-probability (mcts-node-best-child current-node)) 0.5)))))))
+          (let ((prior (sigmoid (* 1/4 (evaluation? (slot-value evaluator 'prior-evaluation) state moves)))))
+            (round (* 100 (- (mcts-node-win-probability (mcts-node-best-child current-node) prior)
+                             0.5))))))))
 
 (defun pmcts-evaluator-sample (evaluator state)
   (pmcts-sample (slot-value evaluator 'tree) state))

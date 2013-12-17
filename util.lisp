@@ -69,7 +69,7 @@
 (deftype v ()
   '(simple-array fixnum (2)))
 
-(declaim (inline v s1 s2 v+v v-v s+v s*v vmap v.v v= list->v v->list))
+(declaim (inline v s1 s2 v+v v-v s+v s*v vmap v.v v= list->v v->list vnorm))
 (defun v (x y)
   (declare (fixnum x y))
   (make-array 2 :element-type 'fixnum :initial-contents (list x y)))
@@ -109,6 +109,11 @@
   (v (the fixnum (+ s (s1 v)))
      (the fixnum (+ s (s2 v)))))
 
+(declaim (ftype (function (fixnum v) v) s-v))
+(defun s-v (s v)
+  (v (the fixnum (- s (s1 v)))
+     (the fixnum (- s (s2 v)))))
+
 (defun s*v (s v)
   (v (the fixnum (* s (s1 v)))
      (the fixnum (* s (s2 v)))))
@@ -116,6 +121,10 @@
 (defun vmap (fn v)
   (v (funcall fn (s1 v))
      (funcall fn (s2 v))))
+
+(defun vnorm (v)
+  (sqrt (+ (expt (s1 v) 2)
+           (expt (s2 v) 2))))
 
 (defun v= (u v)
   (equalp u v))
@@ -257,3 +266,12 @@
       (do (elt) (elt (values elt t))
         (let ((length (list-length list)))
           (setf elt (nth (random length) list))))))
+
+(defun symmetric-sigmoid (x)
+  (if (zerop x)
+      0.0
+      (/ x (1+ (abs x)))))
+
+(defun sigmoid (x)
+  (+ (/ (symmetric-sigmoid x) 2)
+     0.5))

@@ -127,7 +127,7 @@
    (moves-left-mean :initform 0.0 :type single-float)))
 
 (defparameter *tb-ma-sample-budget* 1000)
-(defparameter *tb-ma-sample-depth* 5)
+(defparameter *tb-ma-sample-depth* 8)
 (defparameter *tb-ml-sample-budget* 500)
 
 (defun sample-material-advantages (state)
@@ -156,11 +156,6 @@
                        (unapply-move state breadcrumb)))))
     sample))
 
-(defun symmetric-sigmoid (x)
-  (if (zerop x)
-      0
-      (/ x (1+ (abs x)))))
-
 ;; keep a decaying average of playout lengths.  might overestimate due to inertia,
 ;; but without it we drown in noise.
 (defun estimate-moves-left (agent state)
@@ -184,7 +179,7 @@
              (mean-move-time (/ time-left moves-left))
              (variance-difference (- variance variance-mean))
              ;; when moves-left >= 3, importance ranges from 1/3 (low variance) to 3 (high variance)
-             (importance (expt (min 3 moves-left) (symmetric-sigmoid variance-difference)))
+             (importance (expt (min 2 moves-left) (symmetric-sigmoid (/ variance-difference 4))))
              (time-budget (* mean-move-time importance)))
         (fresh-line)
         (print (list :time-left time-left

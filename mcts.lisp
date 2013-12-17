@@ -33,11 +33,11 @@
 ;; probability.
 (defparameter *prior-nvisits* 30)
 
-(declaim (ftype (function (mcts-node) single-float) mcts-node-win-probability))
-(defun mcts-node-win-probability (node)
+(declaim (ftype (function (mcts-node &optional single-float) single-float) mcts-node-win-probability))
+(defun mcts-node-win-probability (node &optional (prior 0.5))
   (let ((nwins (mcts-node-nwins node))
         (nvisits (mcts-node-nvisits node)))
-    (/ (+ nwins   (* 0.5 *prior-nvisits*))
+    (/ (+ nwins   (* prior *prior-nvisits*))
        (+ nvisits *prior-nvisits*))))
 
 ;; use the plain win-rate in uct computations

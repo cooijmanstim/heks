@@ -7,12 +7,15 @@
         (secret-weapon (make-instance 'time-managing-agent
                                       :agent (make-instance 'minimax-pmcts-agent)
                                       :total-time (* 15 60)))
+        (heuristic-weapon (make-instance 'time-managing-agent
+                                         :agent (make-instance 'minimax-agent
+                                                               :evaluator (make-instance 'simple-evaluator :function #'heuristic-evaluation))
+                                         :total-time (* 15 60)))
         (mediocre-weapon (make-instance 'time-managing-agent
-                                        :agent (make-instance 'minimax-agent
-                                                              :evaluator (make-instance 'material-evaluator))
+                                        :agent (make-instance 'minimax-agent :evaluator (make-instance 'material-evaluator))
                                         :total-time (* 15 60))))
-    (game-add-agent game mediocre-weapon)
-    (game-add-agent game secret-weapon)
+    (game-add-agent game heuristic-weapon)
+    (game-add-agent game nil)
     (unwind-protect
          (graphical-game game)
       (cleanup secret-weapon)

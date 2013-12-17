@@ -20,6 +20,8 @@
                       (setf (aref positions (s1 ij) (s2 ij) k l) (zobrist-bitstring)))))
     positions))
 (defparameter *zobrist-bitstring-black-to-move* (zobrist-bitstring))
+(declaim (zobrist-hash *zobrist-bitstring-black-to-move*)
+         (type (simple-array zobrist-hash) *zobrist-bitstring-positions*))
 
 (declaim (ftype (function (tile v) zobrist-hash) tile-zobrist-bitstring))
 (defun tile-zobrist-bitstring (tile ij)
