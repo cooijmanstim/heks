@@ -43,7 +43,6 @@
                           (*killer-table* killer-table))
                       (minimax-decision state evaluator))))))
 
-;; TODO: moves cache
 (defclass pmcts-agent (agent)
   ((tree :type pmcts-tree
          :initarg :tree
