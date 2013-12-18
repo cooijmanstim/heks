@@ -11,8 +11,7 @@
   :author "Tim Cooijmans <t.cooijmans@student.maastrichtuniversity.nl>"
   :maintainer "Tim Cooijmans <t.cooijmans@student.maastrichtuniversity.nl>"
   :licence "GPL"
-  :depends-on (:alexandria :lisp-unit :cl-utilities :iterate
-                           :cl-ppcre :lispbuilder-sdl :hh-redblack)
+  :depends-on (:alexandria :lisp-unit :cl-utilities :iterate :cl-ppcre :lispbuilder-sdl)
   :serial t
   :components
   ((:file "package")
