@@ -55,10 +55,8 @@
                ;; furthermore, an illegal move may be returned from here, but this never
                ;; happens at the toplevel so it should not cause a crash.  at worst the
                ;; user is presented with a principal variation that ends in an illegal move.
-               ;; furtherfurthermore, the set of moves stored with the transposition may
-               ;; contain illegal moves.
                ;; most of the time an illegal move is tried, it will be caught by apply-move.
-               (with-slots (value type move moves)
+               (with-slots (value type move)
                    transposition
                  (declare (evaluation value))
                  (ccase type
@@ -67,16 +65,15 @@
                    (:upper (minf beta value)))
                  (when (>= alpha beta)
                    (return-from minimax (values value (list move))))
-                 (values move moves))))
-           (maybe-store-transposition (state alpha beta value depth variation moves)
+                 move)))
+           (maybe-store-transposition (state alpha beta value depth variation)
              (declare (evaluation alpha beta value)
                       (fixnum depth))
              (when *transposition-table*
                (with-slots ((stored-depth depth)
                             (stored-value value)
                             (stored-type type)
-                            (stored-move move)
-                            (stored-moves moves))
+                            (stored-move move))
                    (ensure-transposition *transposition-table* state)
                  ;; if the found value is outside or on the border of the search window,
                  ;; it only proves a bound
@@ -88,8 +85,7 @@
                         (setf stored-type :exact)))
                  (setf stored-value value
                        stored-depth depth
-                       stored-move (first variation)
-                       stored-moves moves))))
+                       stored-move (first variation)))))
            (order-moves (depth ply state moves transposition-move)
              (declare (ignore depth state))
              (append (when transposition-move
@@ -101,9 +97,9 @@
                            (random-elt moves)
                            (random-elt moves))
                      moves)))
-    (multiple-value-bind (transposition-move transposition-moves) (maybe-use-transposition state depth)
+    (multiple-value-bind (transposition-move) (maybe-use-transposition state depth)
       ;; investigate the subtree
-      (let ((moves (or transposition-moves (moves state))))
+      (let ((moves (moves state)))
         (when (or (<= depth 0) (null moves))
           (return-from minimax (values (evaluation? evaluator state moves) '())))
         (when *minimax-statistics*
@@ -168,7 +164,7 @@
                 (finally
                  (when *minimax-statistics*
                    (measure-branching-factor *minimax-statistics* branching-factor))
-                 (maybe-store-transposition state original-alpha beta alpha depth principal-variation moves)
+                 (maybe-store-transposition state original-alpha beta alpha depth principal-variation)
                  (when (null (first principal-variation))
                    (break))
                  (return (values alpha principal-variation)))))))))

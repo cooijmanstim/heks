@@ -7,9 +7,7 @@
   (depth 0 :type fixnum)
   (value 0 :type evaluation)
   (type nil :type (or null (member :exact :lower :upper)))
-  (move '())
-  ;; also store the state's legal moves; move generation is expensive
-  (moves '()))
+  (move '()))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defparameter *transposition-table-key-length* 24)
@@ -38,4 +36,3 @@
     transposition
     (setf (svref table (transposition-table-key state))
           (make-transposition :hash (state-hash state)))))
-
