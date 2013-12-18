@@ -26,6 +26,7 @@
    (:file "killer-table")
    (:file "minimax")
    (:file "mcts")
+   (:file "planner")
    (:file "agent")
    (:file "game")
    (:file "gui")
