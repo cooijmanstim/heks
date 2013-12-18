@@ -404,8 +404,7 @@
                   :PLAYER 1
                   :ENDP NIL
                   :HASH 22507219339911910660638959860807479579)"))
-        (*minimax-maximum-depth* 5)
-        (*transposition-minimum-depth* 10))
+        (*minimax-maximum-depth* 5))
     (multiple-value-bind (move value)
         (minimax-decision (copy-state state) (make-simple-evaluator #'material-evaluation))
       (declare (ignore move))

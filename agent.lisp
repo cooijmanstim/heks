@@ -15,23 +15,35 @@
 (defclass minimax-agent (agent)
   ((evaluator :type evaluator
               :initarg :evaluator
-              :accessor minimax-agent-evaluator)))
+              :accessor minimax-agent-evaluator)
+   transposition-table
+   killer-table))
 
 (defmethod initialize ((agent minimax-agent) state)
-  (evaluation* (minimax-agent-evaluator agent) state))
+  (with-slots (evaluator transposition-table killer-table) agent
+    (evaluation* evaluator state)
+    (setf transposition-table (make-transposition-table))
+    (setf killer-table (make-killer-table))))
 
 (defmethod update ((agent minimax-agent) state move breadcrumb)
-  (evaluation+ (minimax-agent-evaluator agent) state move breadcrumb))
+  (with-slots (evaluator killer-table) agent
+    (evaluation+ evaluator state move breadcrumb)
+    (update-killer-table killer-table)))
 
 (defmethod downdate ((agent minimax-agent) state move breadcrumb)
-  (evaluation- (minimax-agent-evaluator agent) state move breadcrumb))
+  (with-slots (evaluator killer-table) agent
+    (evaluation- (minimax-agent-evaluator agent) state move breadcrumb)
+    (downdate-killer-table killer-table)))
 
 (defmethod decide ((agent minimax-agent) state &key (time 10))
   (time-limited time
                 (lambda ()
-                  (with-slots (evaluator) agent
-                    (minimax-decision state evaluator)))))
+                  (with-slots (evaluator transposition-table killer-table) agent
+                    (let ((*transposition-table* transposition-table)
+                          (*killer-table* killer-table))
+                      (minimax-decision state evaluator))))))
 
+;; TODO: moves cache
 (defclass pmcts-agent (agent)
   ((tree :type pmcts-tree
          :initarg :tree

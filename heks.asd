@@ -22,6 +22,8 @@
    (:file "state")
    (:file "knowledge")
    (:file "evaluator")
+   (:file "transposition-table")
+   (:file "killer-table")
    (:file "minimax")
    (:file "mcts")
    (:file "agent")

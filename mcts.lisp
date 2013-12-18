@@ -21,9 +21,7 @@
     (with-slots ((m move) (p parent) untried-moves last-player state-hash) node
       (setf m move
             p parent
-            untried-moves (if *moves-cache*
-                              (copy-list (lookup-moves state :storep nil))
-                              (moves state))
+            untried-moves (moves state)
             last-player (opponent (state-player state))
             state-hash (state-hash state)))
     node))
