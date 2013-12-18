@@ -16,7 +16,9 @@
   (defparameter *transposition-table-key-ceiling* (expt 2 *transposition-table-key-length*)))
 
 (defun make-transposition-table ()
-  (make-array *transposition-table-key-ceiling* :initial-element nil))
+  (make-array *transposition-table-key-ceiling*
+              :element-type 'transposition
+              :initial-element nil))
 
 (defun transposition-table-key (state)
   (multiple-value-bind (quotient remainder)

@@ -138,7 +138,7 @@
 (defmethod initialize ((agent time-managing-agent) state)
   (with-slots (agent planner) agent
     (initialize agent state)
-    (initialize planner state)))
+    (initialize-planner planner state)))
 
 (defmethod decide ((agent time-managing-agent) state &key time)
   (with-slots (agent planner) agent

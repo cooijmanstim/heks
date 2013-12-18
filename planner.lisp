@@ -80,7 +80,7 @@
    (variance-sample-size :initform 0 :type integer)
    (moves-left-mean :initform 0.0 :type single-float)))
 
-(defmethod initialize ((planner planner) state)
+(defun initialize-planner (planner state)
   ;; initialize mean variance estimate
   (dotimes (i 10)
     (estimate-stake planner state)))

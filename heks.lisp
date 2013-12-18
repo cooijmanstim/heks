@@ -14,7 +14,7 @@
         (mediocre-weapon (make-instance 'time-managing-agent
                                         :agent (make-instance 'minimax-agent :evaluator (make-instance 'material-evaluator))
                                         :planner (make-instance 'planner :total-time (* 15 60)))))
-    (game-add-agent game heuristic-weapon)
+    (game-add-agent game mediocre-weapon)
     (game-add-agent game nil)
     (unwind-protect
          (graphical-game game)
@@ -84,7 +84,7 @@
                    (when (and submove
                               (set-equal (list submove) supermoves :test #'move-equal))
                      (game-update game submove)
-                     (sb-ext:gc :full t)
+                     (sb-ext:gc)
                      (state-dump state (format nil "/home/tim/school/isg/~A" (gensym "STATE-DUMP-")))
                      (fresh-move)
                      (unless manual-operation
