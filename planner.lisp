@@ -36,37 +36,43 @@
 
 ;; keep a decaying average of playout lengths.  might overestimate due to inertia,
 ;; but without it we drown in noise.
-(defun estimate-moves-left (agent state)
-  (with-slots (moves-left-mean) agent
+(defun estimate-moves-left (planner state)
+  (with-slots (moves-left-mean) planner
     (iter (repeat *tb-ml-sample-budget*)
           (for move-count = (iter (with state = (copy-state state))
                                   (for moves = (moves state))
                                   (until (emptyp moves))
                                   (count t)
                                   (apply-move state (random-elt moves))))
-          (setf moves-left-mean (+ (* 0.8 moves-left-mean)
-                                   (* 0.2 move-count))))
+          (setf moves-left-mean (+ (* 0.6 moves-left-mean)
+                                   (* 0.4 move-count))))
     moves-left-mean))
 
-(defun time-budget (planner state)
+;; compares the variance in a sample-material-advantages sample to the typical/mean
+;; variance.  estimates how much is at stake relative to how much is usually at stake.
+(defun estimate-stake (planner state)
   (let* ((sample (sample-material-advantages state))
          (variance (coerce (variance sample) 'single-float)))
-    (with-slots (variance-mean variance-sample-size time-left) planner
+    (with-slots (variance-mean variance-sample-size) planner
       (update-running-average variance-mean variance-sample-size variance)
-      (let* ((moves-left (estimate-moves-left planner state))
-             (mean-move-time (/ time-left moves-left))
-             (extra-variance (- variance variance-mean))
-             ;; when moves-left >= 2, importance ranges from 1/2 (low variance) to 2 (high variance)
-             (importance (expt (min 2 moves-left) (symmetric-sigmoid (/ extra-variance 4))))
-             (time-budget (* mean-move-time importance)))
-        (fresh-line)
-        (print (list :time-left time-left
-                     :moves-left moves-left
-                     :mean-move-time mean-move-time
-                     :extra-variance extra-variance
-                     :importance importance
-                     :time-budget time-budget))
-        time-budget))))
+      (- variance variance-mean))))
+
+(defun time-budget (planner state)
+  (let* ((time-left (slot-value planner 'time-left))
+         (moves-left (estimate-moves-left planner state))
+         (mean-move-time (/ time-left moves-left))
+         (stake (estimate-stake planner state))
+         ;; when moves-left >= 2, importance ranges from 1/2 (low stakes) to 2 (high stakes)
+         (importance (expt (min 2 moves-left) (symmetric-sigmoid (/ stake 8))))
+         (time-budget (* mean-move-time importance)))
+    (fresh-line)
+    (print (list :time-left time-left
+                 :moves-left moves-left
+                 :mean-move-time mean-move-time
+                 :stake stake
+                 :importance importance
+                 :time-budget time-budget))
+    time-budget))
 
 (defclass planner ()
   ((time-left :type single-float :initarg :total-time :initform most-positive-single-float)
@@ -77,7 +83,7 @@
 (defmethod initialize ((planner planner) state)
   ;; initialize mean variance estimate
   (dotimes (i 10)
-    (time-budget planner state)))
+    (estimate-stake planner state)))
 
 (defun plan-and-decide (planner state decision-fn)
   (with-slots (time-left) planner
