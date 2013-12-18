@@ -25,6 +25,8 @@
     remainder))
 
 (defun lookup-transposition (table state &optional (depth 0))
+  (declare (optimize speed)
+           (fixnum depth))
   (let ((transposition (svref table (transposition-table-key state))))
     (when (and transposition
                (= (transposition-hash transposition) (state-hash state))
