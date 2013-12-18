@@ -123,8 +123,11 @@
      (funcall fn (s2 v))))
 
 (defun vnorm (v)
-  (sqrt (+ (expt (s1 v) 2)
-           (expt (s2 v) 2))))
+  (declare (optimize (speed 3) (safety 0))
+           (v v))
+  ;; fingers crossed!
+  (sqrt (the fixnum (+ (the fixnum (* (s1 v) (s1 v)))
+                       (the fixnum (* (s2 v) (s2 v)))))))
 
 (defun v= (u v)
   (equalp u v))

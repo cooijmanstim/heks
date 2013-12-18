@@ -7,16 +7,88 @@
 (defparameter *evaluation-minimum* (- *evaluation-maximum*))
 (declaim (evaluation *evaluation-minimum* *evaluation-maximum*))
 
+(declaim (inline evaluation-inverse))
 (defun evaluation-inverse (v)
-  (+ *evaluation-minimum*
-     (- *evaluation-maximum*
-        v)))
+  (- v))
 
-(declaim (ftype (function (single-float &optional fixnum) evaluation) granularize))
-(defun granularize (x &optional (granularity 16))
-  (declare (optimize (speed 3) (safety 0)))
-  (round (* (/ granularity 2)
-            (/ x (1+ (abs x))))))
+(defparameter *tile-weights*
+  (let* ((board (make-empty-board))
+         (weights (make-array (append '(2) (array-dimensions board)))))
+    (labels ((proximity (u v)
+               (exp (- (vnorm (v-v u v))))))
+      (iter (for tile at ij of board)
+            (iter (for player in (list *white-player* *black-player*))
+                  (for ij2 in (list ij (s+v -1 (v-v *board-dimensions* ij))))
+                  (setf (aref weights player (s1 ij) (s2 ij))
+                        (+ 1
+                           ;; mix a couple of gaussians in there
+                           (* 1 (proximity ij2 (v 9 9)))  ;; go toward opponent
+                           (* 2 (proximity ij2 (v 1 5)))  ;; go toward corners
+                           (* 2 (proximity ij2 (v 5 1)))
+                           (* 2 (proximity ij2 (v 9 5)))
+                           (* 2 (proximity ij2 (v 5 9))))))))
+    weights))
+
+(declaim (ftype (function (v player) single-float) tile-weight))
+(defun tile-weight (ij owner)
+  (aref *tile-weights* owner (s1 ij) (s2 ij)))
+
+(defparameter *feature-weights*
+  #(
+   1.083451156943683
+  -0.062543846281054
+   0.055784069291807
+  -0.675006007019073
+   0.409534634004255
+  -0.063101550011102
+   0.043101573338307
+   0.261765181484584
+  -0.205680376270151
+  ))
+
+(defun heuristic-features (state)
+  (declare (optimize (speed 3) (safety 1)))
+  (let* ((men           (vector 0 0))
+         (kings         (vector 0 0))
+         (weighted-men  (vector 0.0 0.0))
+         (capturability (vector 0 0))
+         (us (state-player state))
+         (them (opponent us))
+         (board (state-board state)))
+    (declare (board board)
+             (dynamic-extent men kings weighted-men capturability))
+    (iter (for tile at ij of board)
+          (with-slots (object owner) tile
+            (case object
+              (:man (incf (the fixnum (svref men owner)))
+                    (incf (the single-float (svref weighted-men owner)) (tile-weight ij owner))
+                    (incf (the fixnum (svref capturability owner))
+                          ;; number of axes along which the piece has empties on both sides
+                          (the fixnum (iter (for direction in (player-forward-directions *white-player*))
+                                            (counting (and (tile-empty-p board (v+v ij direction))
+                                                           (tile-empty-p board (v-v ij direction))))))))
+              (:king (incf (the fixnum (svref kings owner)))))))
+    (labels ((average-capturability (player)
+               (if (zerop (svref men player))
+                   0.0
+                   (/ (svref capturability player)
+                      1.0 (svref men player)))))
+      (vector 1
+              (svref men   us) (svref men   them)
+              (svref kings us) (svref kings them)
+              (svref weighted-men us) (svref weighted-men them)
+              (average-capturability us) (average-capturability them)))))
+
+(declaim (ftype (function (state list) evaluation) heuristic-evaluation))
+(defun heuristic-evaluation (state moves)
+  (declare (ignore moves))
+  (let ((probability (exp (- (dot-product *feature-weights* (heuristic-features state))))))
+    (values
+     ;; center and discretize
+     (round (* (- probability 0.5)
+               100))
+     probability)))
+
 
 (defparameter *king-value* 10)
 (declaim (fixnum *king-value*))
@@ -44,68 +116,6 @@
       (labels ((material-score (player)
                  (+ (the fixnum (svref men player)) (the fixnum (* *king-value* (the fixnum (svref kings player)))))))
         (- (material-score us) (material-score them))))))
-
-(declaim (ftype (function (v player) single-float) tile-weight))
-(defun tile-weight (ij owner)
-  (declare (v ij)
-           (optimize (speed 3) (safety 1))
-           (player owner))
-  (let ((end (- *board-size* 1)))
-    (declare (fixnum end))
-    (when (= owner *black-player*)
-      (setf ij (s-v end ij)))
-    (coerce (/ (- (vnorm (v-v ij (v 1 1))) ;; get away from home
-                  (vnorm (v-v ij (v end end))) ;; toward opponent
-                  (min (vnorm (v-v ij (v end 1))) ;; into corners/sides
-                       (vnorm (v-v ij (v 1 end)))))
-               end)
-            'single-float)))
-
-(declaim (ftype (function (state list) evaluation) heuristic-evaluation))
-(defun heuristic-evaluation (state moves)
-  (declare (optimize (speed 3) (safety 1))
-           (ignore moves))
-  (let* ((men           (vector 0 0))
-         (kings         (vector 0 0))
-         (capturability (vector 0 0))
-         (positional-score (vector 0.0 0.0))
-         (us (state-player state))
-         (them (opponent us))
-         (board (state-board state)))
-    (declare (board board))
-    (iter (for tile at ij of board)
-          (with-slots (object owner) tile
-            (case object
-              (:man (incf (the fixnum (svref men owner)))
-                    (incf (the single-float (svref positional-score owner)) (tile-weight ij owner))
-                    (incf (the fixnum (svref capturability owner))
-                          ;; number of axes along which the piece has empties on both sides
-                          (the fixnum (iter (for direction in (player-forward-directions *white-player*))
-                                            (counting (and (tile-empty-p board (v+v ij direction))
-                                                           (tile-empty-p board (v-v ij direction))))))))
-              (:king (incf (the fixnum (svref kings owner)))))))
-    (labels ((material-score (player)
-               (+ (the fixnum (svref men player)) (the fixnum (* *king-value* (the fixnum (svref kings player))))))
-             (average-capturability (player)
-               (if (zerop (the fixnum (svref men player)))
-                   0.0
-                   (/ (the fixnum (svref capturability player)) (the fixnum (svref men player)) 1.0)))
-             (average-positional-score (player)
-               (if (zerop (the fixnum (svref men player)))
-                   0.0
-                   (/ (the single-float (svref positional-score player)) (the fixnum (svref men player))))))
-      (declare (ftype (function (player) fixnum) material-score)
-               (ftype (function (player) single-float) average-capturability))
-      (granularize (* 1/8
-                      (+ (coerce (- (material-score us)
-                                    (material-score them))
-                                 'single-float)
-                         (* 0.5 (- (average-capturability them)
-                                   (average-capturability us)))
-                         (* 4 (the single-float (symmetric-sigmoid (/ (- (average-positional-score them)
-                                                                         (average-positional-score us))
-                                                                      8))))))
-                   16))))
 
 (defstruct running-material
   (men   (vector 0 0) :type simple-vector)

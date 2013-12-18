@@ -3,19 +3,20 @@
 (declaim (optimize (debug 3)))
 
 (defun main ()
-  (let ((game (make-game))
-        (secret-weapon (make-instance 'time-managing-agent
-                                      :agent (make-instance 'minimax-pmcts-agent)
-                                      :planner (make-instance 'planner :total-time (* 15 60))))
-        (heuristic-weapon (make-instance 'time-managing-agent
-                                         :agent (make-instance 'minimax-agent
-                                                               :evaluator (make-instance 'simple-evaluator :function #'heuristic-evaluation))
-                                         :planner (make-instance 'planner :total-time (* 15 60))))
-        (mediocre-weapon (make-instance 'time-managing-agent
-                                        :agent (make-instance 'minimax-agent :evaluator (make-instance 'material-evaluator))
-                                        :planner (make-instance 'planner :total-time (* 15 60)))))
+  (let* ((decision-time (* 10 60))
+         (game (make-game))
+         (secret-weapon (make-instance 'time-managing-agent
+                                       :agent (make-instance 'minimax-pmcts-agent)
+                                       :planner (make-instance 'planner :total-time decision-time)))
+         (heuristic-weapon (make-instance 'time-managing-agent
+                                          :agent (make-instance 'minimax-agent
+                                                                :evaluator (make-instance 'simple-evaluator :function #'heuristic-evaluation))
+                                          :planner (make-instance 'planner :total-time decision-time)))
+         (mediocre-weapon (make-instance 'time-managing-agent
+                                         :agent (make-instance 'minimax-agent :evaluator (make-instance 'material-evaluator))
+                                         :planner (make-instance 'planner :total-time decision-time))))
+    (game-add-agent game heuristic-weapon)
     (game-add-agent game mediocre-weapon)
-    (game-add-agent game nil)
     (unwind-protect
          (graphical-game game)
       (cleanup secret-weapon)

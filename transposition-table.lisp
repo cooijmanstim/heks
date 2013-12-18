@@ -1,6 +1,6 @@
 (in-package :heks)
 
-(declaim (optimize (debug 3) (safety 3)))
+(declaim (optimize speed space))
 
 (defstruct transposition
   (hash 0 :type zobrist-hash)
@@ -16,7 +16,7 @@
 (defun make-transposition-table ()
   (make-array *transposition-table-key-ceiling*
               :element-type 'transposition
-              :initial-element nil))
+              :initial-element (make-transposition)))
 
 (defun transposition-table-key (state)
   (multiple-value-bind (quotient remainder)

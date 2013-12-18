@@ -43,6 +43,12 @@
                           (*killer-table* killer-table))
                       (minimax-decision state evaluator))))))
 
+(defmethod cleanup ((agent minimax-agent))
+  ;; clean up ye olde table
+  (with-slots (transposition-table) agent
+    (setf transposition-table nil))
+  (sb-ext:gc :full t))
+
 (defclass pmcts-agent (agent)
   ((tree :type pmcts-tree
          :initarg :tree
