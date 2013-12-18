@@ -269,7 +269,8 @@
                   (when-let ((piece-moves (piece-moves board ij object owner)))
                     (push piece-moves moves-lists)))))))))
     (cond (captures-lists
-           (apply #'longest-captures captures-lists))
+           (values (apply #'longest-captures captures-lists)
+                   t))
           (moves-lists
            (apply #'nconc moves-lists))
           (t

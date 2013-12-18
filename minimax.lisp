@@ -99,7 +99,7 @@
                      moves)))
     (multiple-value-bind (transposition-move) (maybe-use-transposition state depth)
       ;; investigate the subtree
-      (let ((moves (moves state)))
+      (multiple-value-bind (moves capturep) (moves state)
         (when (or (<= depth 0) (null moves))
           (return-from minimax (values (evaluation? evaluator state moves) '())))
         (when *minimax-statistics*
@@ -124,6 +124,8 @@
                           (unapply-move state breadcrumb)))))
           (iter (for move in (order-moves depth ply state moves transposition-move))
                 (with branching-factor = 0)
+                ;; let capturing plies not contribute to depth
+                (with depth-difference = (if capturep 0 1))
                 (with principal-variation = (list (first moves))) ; initialize with any move
                 (with-tentative-move
                     (let ((current-variation '())
@@ -134,7 +136,7 @@
                                  (declare (evaluation alpha beta))
                                  (multiple-value-bind (subvalue subvariation)
                                      (minimax state
-                                              (the fixnum (1- depth))
+                                              (the fixnum (- depth depth-difference))
                                               (the fixnum (1+ ply))
                                               evaluator
                                               (evaluation-inverse beta)
