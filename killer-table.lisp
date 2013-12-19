@@ -2,7 +2,7 @@
 
 (declaim (optimize (debug 3) (safety 3)))
 
-(defparameter *killer-count* 3)
+(defparameter *killer-count* 2)
 (defparameter *killer-table-ply-count* 50)
 
 (defun make-killer-table ()

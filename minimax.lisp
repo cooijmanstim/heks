@@ -43,8 +43,6 @@
            (fixnum depth ply)
            (evaluator evaluator)
            (evaluation alpha beta))
-  (when *out-of-time*
-    (throw :out-of-time nil))
   (labels ((maybe-use-transposition (state depth)
              (when-let* ((table *transposition-table*)
                          (transposition (lookup-transposition table state depth)))
@@ -179,10 +177,10 @@
         variation
         (*minimax-statistics* (when verbose (make-minimax-statistics)))
         (state (copy-state state)))
-    (catch :out-of-time
-      (iter (for max-depth from 0 below *minimax-maximum-depth*)
-            (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
-            (print (list max-depth value variation))))
+    (iter (for max-depth from 0 below *minimax-maximum-depth*)
+          (until *out-of-time*)
+          (multiple-value-setq (value variation) (minimax state max-depth 0 evaluator))
+          (print (list max-depth value variation)))
     (when verbose
       (print (list variation *minimax-statistics*)))
     (values (first variation) value)))
