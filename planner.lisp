@@ -39,11 +39,13 @@
 (defun estimate-moves-left (planner state)
   (with-slots (moves-left-mean) planner
     (iter (repeat *tb-ml-sample-budget*)
-          (for move-count = (iter (with state = (copy-state state))
-                                  (for moves = (moves state))
-                                  (until (emptyp moves))
-                                  (count t)
-                                  (apply-move state (random-elt moves))))
+          (for move-count = (/ (iter (with state = (copy-state state))
+                                     (for moves = (moves state))
+                                     (until (emptyp moves))
+                                     (count t)
+                                     (apply-move state (random-elt moves)))
+                               ;; only half the moves are ours; divide by 2
+                               2))
           (setf moves-left-mean (+ (* 0.6 moves-left-mean)
                                    (* 0.4 move-count))))
     moves-left-mean))
