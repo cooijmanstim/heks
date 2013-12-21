@@ -26,10 +26,7 @@
             state-hash (state-hash state)))
     node))
 
-;; pretend that each node has *prior-nvisits* additional visits, half of which
-;; are wins.  this acts somewhat like a prior of 0.5 on the winning
-;; probability.
-(defparameter *prior-nvisits* 30)
+(defparameter *prior-nvisits* 10)
 
 (declaim (ftype (function (mcts-node &optional single-float) single-float) mcts-node-win-probability))
 (defun mcts-node-win-probability (node &optional (prior 0.5))
@@ -47,13 +44,14 @@
         0.5
         (coerce (/ (+ nwins) (+ nvisits)) 'single-float))))
 
+(defparameter *uct-exploitation-weight* 1)
 (defun mcts-node-uct (child parent-nvisits)
   (if (= parent-nvisits 0)
       ;; this case happens when the node is added by another thread but
       ;; that thread is not yet done with the first rollout. the children
       ;; will be in place though.
       0
-      (+ (mcts-node-win-rate child)
+      (+ (* *uct-exploitation-weight* (mcts-node-win-rate child))
          (sqrt (/ (* 1/4 (log (the (integer 1) parent-nvisits)))
                   ;; race conditions make it possible for child-nvisits to be 0 here
                   (+ 1e-4 (mcts-node-nvisits child)))))))
@@ -178,7 +176,7 @@
 
 ;; disconnect everything
 (defun mcts-node-destroy (node)
-  (declare (optimize (debug 0) (safety 1) (speed 3)))
+  (declare (optimize (debug 1) (safety 1) (speed 3)))
   (let ((parent (mcts-node-parent node))
         (children (mcts-node-children node)))
     (setf (mcts-node-parent node) nil)
