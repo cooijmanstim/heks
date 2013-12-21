@@ -63,3 +63,5 @@
 (defun game-over (game)
   (state-endp (game-state game)))
 
+(defun game-winner (game)
+  (state-winner (game-state game)))

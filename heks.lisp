@@ -3,7 +3,7 @@
 (declaim (optimize (debug 3)))
 
 (defun main ()
-  (let* ((decision-time (* 10 60))
+  (let* ((decision-time (* 15 60))
          (game (make-game))
          (secret-weapon (make-instance 'time-managing-agent
                                        :agent (make-instance 'minimax-pmcts-agent)
@@ -15,19 +15,51 @@
          (mediocre-weapon (make-instance 'time-managing-agent
                                          :agent (make-instance 'minimax-agent :evaluator (make-instance 'material-evaluator))
                                          :planner (make-instance 'planner :total-time decision-time))))
+    (game-add-agent game nil)
     (game-add-agent game heuristic-weapon)
-    (game-add-agent game mediocre-weapon)
     (unwind-protect
          (graphical-game game)
+      (cleanup heuristic-weapon)
       (cleanup secret-weapon)
       (cleanup mediocre-weapon))))
 
+(defun tournament (agent-factories)
+  (iter (with scoreboard = (make-array (list (length agent-factories)
+                                             (length agent-factories))
+                                       :initial-element 0))
+        (iter (for white-factory in-sequence agent-factories :with-index iwhite)
+              (for white-agent = (funcall white-factory))
+              (iter (for black-factory in-sequence agent-factories :with-index iblack)
+                    (for black-agent = (funcall black-factory))
+                    (for game = (make-game))
+                    (when (= iwhite iblack)
+                      (next-iteration))
+                    (game-add-agent game white-agent)
+                    (game-add-agent game black-agent)
+                    (unwind-protect
+                         (let ((winner (graphical-game game t 200 t)))
+                           (cond ((equalp winner *white-player*)
+                                  (incf (aref scoreboard iwhite iblack)))
+                                 ((equalp winner *black-player*)
+                                  (incf (aref scoreboard iblack iwhite))))
+                           (print scoreboard)
+                           (with-open-file (stream "/home/tim/school/isg/scoreboard" :direction :output :if-exists :supersede :if-does-not-exist :create)
+                             (prin1 scoreboard stream)))
+                      (cleanup white-agent)
+                      (cleanup black-agent)
+                      (sb-ext:gc :full t))))))
+
 (defun graphical-game (&optional (game (let ((game (make-game)))
                                          (game-add-agent game nil)
-                                         game)))
+                                         game))
+                       terminate-on-endp
+                       max-length
+                       auto-start)
   (declare (optimize (debug 3)))
   (with-slots (state) game
-    (let (;; UI state: submove is the partial move constructed so far. all-moves
+    (let (;; how long the game has been dragging on for
+          (move-count 0)
+          ;; UI state: submove is the partial move constructed so far. all-moves
           ;; and supermoves respectively contain all legal moves and all legal
           ;; supermoves of submove
           all-moves submove supermoves
@@ -66,7 +98,9 @@
                          all-moves (moves state)
                          supermoves (supermoves submove all-moves))
                    (when (game-over game)
-                     (setf manual-operation t))
+                     (setf manual-operation t)
+                     (when terminate-on-endp
+                       (return-from graphical-game (game-winner game))))
                    (redraw)
                    (fresh-line))
                  (update-move (new-submove)
@@ -85,6 +119,9 @@
                    (when (and submove
                               (set-equal (list submove) supermoves :test #'move-equal))
                      (game-update game submove)
+                     (incf move-count)
+                     (when (>= move-count max-length)
+                       (return-from graphical-game nil))
                      (sb-ext:gc)
                      (state-dump state (format nil "/home/tim/school/isg/~A" (gensym "STATE-DUMP-")))
                      (fresh-move)
@@ -92,11 +129,14 @@
                        (current-agent-move))
                      (redraw)))
                  (undo-move ()
+                   (decf move-count)
                    (game-downdate game)
                    (setf manual-operation t)
                    (fresh-move)))
           (setq *surface* (apply #'sdl:window (v->list *window-dimensions*)))
           (fresh-move)
+          (when auto-start
+            (let-the-games-begin))
           ;; interface: left-click to build a move (first click chooses the piece
           ;; to move, further clicks choose where to move it. more than one further
           ;; click corresponds to a move capturing multiple pieces, and each click
