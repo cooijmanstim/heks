@@ -76,8 +76,8 @@
             (mcts-sample current-node state))
           (update-running-average support-mean support-sample-size (mcts-node-nvisits current-node))
           (let ((prior (sigmoid (* 1/4 (evaluation? (slot-value evaluator 'prior-evaluation) state moves)))))
-            (round (* 100 (- (mcts-node-win-probability (mcts-node-best-child current-node) prior)
-                             0.5))))))))
+            (round (* 50 (- (mcts-node-win-probability (mcts-node-best-child current-node) prior)
+                            0.5))))))))
 
 (defun pmcts-evaluator-sample (evaluator state)
   (pmcts-sample (slot-value evaluator 'tree) state))

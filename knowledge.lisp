@@ -86,7 +86,7 @@
     (values
      ;; center and discretize
      (round (* (- probability 0.5)
-               100))
+               50))
      probability)))
 
 
