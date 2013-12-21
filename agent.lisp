@@ -131,10 +131,12 @@
     (format t "mean pmcts evaluator support: ~A" (slot-value evaluator 'support-mean))))
 
 (defmethod cleanup :after ((agent minimax-pmcts-agent))
-  (with-slots (ponderers keep-pondering) agent
+  (with-slots (ponderers keep-pondering evaluator) agent
     (setf keep-pondering nil)
     (dolist (ponderer ponderers)
-      (sb-thread:join-thread ponderer :default nil))))
+      (sb-thread:join-thread ponderer :default nil))
+    (when-let ((node (pmcts-tree-root-node (slot-value evaluator 'tree))))
+      (mcts-node-destroy node))))
 
 (defclass time-managing-agent (agent)
   ((agent :initarg :agent)
