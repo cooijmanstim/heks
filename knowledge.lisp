@@ -35,15 +35,11 @@
 
 (defparameter *feature-weights*
   #(
-   1.083451156943683
-  -0.062543846281054
-   0.055784069291807
-  -0.675006007019073
-   0.409534634004255
-  -0.063101550011102
-   0.043101573338307
-   0.261765181484584
-  -0.205680376270151
+    0.7394
+   -0.0357
+   -0.9525
+   -0.0712
+   -0.1382
   ))
 
 (defun heuristic-features (state)
@@ -69,15 +65,15 @@
                                                            (tile-empty-p board (v-v ij direction))))))))
               (:king (incf (the fixnum (svref kings owner)))))))
     (labels ((average-capturability (player)
-               (if (zerop (svref men player))
+               (if (zerop (the fixnum (svref men player)))
                    0.0
-                   (/ (svref capturability player)
-                      1.0 (svref men player)))))
+                   (/ (the fixnum (svref capturability player))
+                      1.0 (the fixnum (svref men player))))))
       (vector 1
-              (svref men   us) (svref men   them)
-              (svref kings us) (svref kings them)
-              (svref weighted-men us) (svref weighted-men them)
-              (average-capturability us) (average-capturability them)))))
+              (the fixnum (- (the fixnum (svref men   us)) (the fixnum (svref men   them))))
+              (the fixnum (- (the fixnum (svref kings us)) (the fixnum (svref kings them))))
+              (the single-float (- (the single-float (svref weighted-men us)) (the single-float (svref weighted-men them))))
+              (the single-float (- (the single-float (average-capturability them)) (the single-float (average-capturability us))))))))
 
 (declaim (ftype (function (state list) evaluation) heuristic-evaluation))
 (defun heuristic-evaluation (state moves)
